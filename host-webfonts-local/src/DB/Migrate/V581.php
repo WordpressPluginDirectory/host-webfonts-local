@@ -16,17 +16,17 @@
 
 namespace OMGF\DB\Migrate;
 
-use OMGF\Helper as OMGF;
 use OMGF\Admin\Settings;
+use OMGF\Helper as OMGF;
 
 defined( 'ABSPATH' ) || exit;
 
-class V534 {
+class V581 {
 	/** @var $version string The version number this migration script was introduced with. */
-	private $version = '5.3.4';
+	private $version = '5.8.1';
 
 	/**
-	 * Buid
+	 * Build class
 	 * @return void
 	 */
 	public function __construct() {
@@ -38,41 +38,10 @@ class V534 {
 	 * @return void
 	 */
 	private function init() {
-		$optimized_fonts = OMGF::admin_optimized_fonts() ?? [];
-		$upgrade_req     = false;
-
-		foreach ( $optimized_fonts as $stylesheet => $fonts ) {
-			foreach ( $fonts as $font ) {
-				$variants = $font->variants ?? [];
-
-				foreach ( $variants as $key => $variant ) {
-					/**
-					 * Optimized Fonts needs upgrading if $variants is still an indexed array.
-					 * @since v5.3.0 $variants should be an associative array.
-					 */
-					if ( is_numeric( $key ) ) {
-						$upgrade_req = true;
-
-						break;
-					}
-				}
-
-				if ( $upgrade_req ) {
-					break;
-				}
-			}
-
-			if ( $upgrade_req ) {
-				break;
-			}
-		}
-
 		/**
-		 * Mark cache as stale if upgrade is required.
+		 * Delete the omgf_fonts object which is no longer used.
 		 */
-		if ( $upgrade_req ) {
-			OMGF::update_option( Settings::OMGF_CACHE_IS_STALE, $upgrade_req );
-		}
+		OMGF::delete_option( 'omgf_fonts' );
 
 		/**
 		 * Update stored version number.
