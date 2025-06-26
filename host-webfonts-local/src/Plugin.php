@@ -10,20 +10,15 @@
  *
  * @package  : OMGF
  * @author   : Daan van den Bergh
- * @copyright: © 2017 - 2024 Daan van den Bergh
+ * @copyright: © 2017 - 2025 Daan van den Bergh
  * @url      : https://daan.dev
  * * * * * * * * * * * * * * * * * * * */
 
 namespace OMGF;
 
-use OMGF\Admin\Ajax;
 use OMGF\Admin\Settings;
 use OMGF\DB\Migrate;
-use OMGF\Frontend\Actions;
-use OMGF\Frontend\Filters;
 use OMGF\Helper as OMGF;
-
-defined( 'ABSPATH' ) || exit;
 
 class Plugin {
 	/**
@@ -39,16 +34,20 @@ class Plugin {
 		// Only load in wp-admin.
 		if ( is_admin() ) {
 			new Admin\Actions();
-			new Ajax();
+			new Admin\Ajax();
 		}
 
-		// Only load in frontend.
+		// Only load in the frontend.
 		if ( ! is_admin() ) {
-			new Actions();
-			new Filters();
+			new Frontend\Actions();
+			new Frontend\Filters();
+			new Frontend\Compatibility();
 		}
 
-		new \OMGF\Filters();
+		// Load globally.
+		new API\AdminbarMenu();
+		new Compatibility();
+		new Filters();
 
 		if ( ! empty( OMGF::get_option( Settings::OMGF_ADV_SETTING_UNINSTALL ) ) ) {
 			register_uninstall_hook( OMGF_PLUGIN_FILE, [ '\OMGF\Plugin', 'do_uninstall' ] ); // @codeCoverageIgnore
@@ -65,7 +64,7 @@ class Plugin {
 			return;
 		}
 
-		/** Prevents undefined constant in OMGF Pro, if its not at version v3.3.0 (yet) */
+		/** Prevents undefined constant errors in OMGF Pro if it's not at version v3.3.0 (yet) */
 		define( 'OMGF_OPTIMIZATION_MODE', false );
 		define( 'OMGF_SITE_URL', 'https://daan.dev' );
 		define( 'OMGF_CACHE_IS_STALE', esc_attr( OMGF::get_option( Settings::OMGF_CACHE_IS_STALE ) ) );

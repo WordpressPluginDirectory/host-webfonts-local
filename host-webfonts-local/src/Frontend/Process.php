@@ -10,18 +10,16 @@
 *
 * @package  : OMGF
 * @author   : Daan van den Bergh
-* @copyright: © 2024 Daan van den Bergh
+* @copyright: © 2025 Daan van den Bergh
 * @url      : https://daan.dev
 * * * * * * * * * * * * * * * * * * * */
 
 namespace OMGF\Frontend;
 
-use OMGF\Helper as OMGF;
+use OMGF\Admin\Dashboard;
 use OMGF\Admin\Settings;
+use OMGF\Helper as OMGF;
 use OMGF\Optimize;
-use OMGF\TaskManager;
-
-defined( 'ABSPATH' ) || exit;
 
 class Process {
 	const PRELOAD_ALLOWED_HTML = [
@@ -40,7 +38,6 @@ class Process {
 		'fonts.gstatic.com',
 		'fonts.bunny.net',
 		'fonts-api.wp.com',
-		'fonts.mailerlite.com',
 	];
 
 	const RESOURCE_HINTS_ATTR  = [ 'dns-prefetch', 'preconnect', 'preload' ];
@@ -55,9 +52,19 @@ class Process {
 	];
 
 	/**
+	 * Populates ?edit= parameter. To make sure OMGF doesn't run while editing posts.
+	 *
+	 * @var string[]
+	 */
+	public static $edit_actions = [
+		'edit',
+		'elementor',
+	];
+
+	/**
 	 * @var array $page_builders Array of keys set by page builders when they're displaying their previews.
 	 */
-	private $page_builders = [
+	public static $page_builders = [
 		'bt-beaverbuildertheme',
 		'ct_builder',
 		'elementor-preview',
@@ -69,16 +76,6 @@ class Process {
 		'tve',
 		'vc_action', // WP Bakery
 		'perfmatters', // Perfmatter's Frontend Script Manager.
-	];
-
-	/**
-	 * Populates ?edit= parameter. To make sure OMGF doesn't run while editing posts.
-	 *
-	 * @var string[]
-	 */
-	private $edit_actions = [
-		'edit',
-		'elementor',
 	];
 
 	/**
@@ -104,7 +101,29 @@ class Process {
 		$this->break     = $break;
 		$this->timestamp = OMGF::get_option( Settings::OMGF_CACHE_TIMESTAMP, '' );
 
+		if ( ! $this->timestamp ) {
+			$this->timestamp = $this->generate_timestamp(); // @codeCoverageIgnore
+		}
+
 		$this->init();
+	}
+
+	/**
+	 * Generates a timestamp and stores it to the DB, which is appended to the stylesheet and fonts URLs.
+	 *
+	 * @see StylesheetGenerator::build_source_string()
+	 * @see self::build_search_replace()
+	 *
+	 * @return int
+	 *
+	 * @codeCoverageIgnore
+	 */
+	private function generate_timestamp() {
+		$timestamp = time();
+
+		OMGF::update_option( Settings::OMGF_CACHE_TIMESTAMP, $timestamp ); // @codeCoverageIgnore
+
+		return $timestamp;
 	}
 
 	/**
@@ -117,8 +136,8 @@ class Process {
 		 * Halt execution if:
 		 * * $break parameter is set.
 		 * * `nomgf` GET-parameter is set.
-		 * * Test Mode is enabled and current user is not an admin.
-		 * * Test Mode is enabled and `omgf` GET-parameter is not set.
+		 * * Test Mode is enabled and the current user is not an admin.
+		 * * Test Mode is enabled and the `omgf` GET-parameter is not set.
 		 */
 		$test_mode_enabled = ! empty( OMGF::get_option( Settings::OMGF_OPTIMIZE_SETTING_TEST_MODE ) );
 
@@ -131,26 +150,17 @@ class Process {
 		add_action( 'wp_head', [ $this, 'add_preloads' ], 3 );
 		add_action( 'template_redirect', [ $this, 'maybe_buffer_output' ], 3 );
 		/**
-		 * @since v5.3.10 parse() runs on priority 10. Run this afterwards, to make sure e.g. the <preload> -> <noscript> approach some theme
+		 * @since v5.3.10 parse() runs on priority 10. Run this afterward, to make sure e.g. the <preload> -> <noscript> approach some theme
 		 *                developers use keeps working.
 		 */
 		add_filter( 'omgf_buffer_output', [ $this, 'remove_resource_hints' ], 11 );
 
-		/** Only hook into our own filter if Smart Slider 3 isn't active, as it has its own filter. */
+		/** Only hook into our own filter if Smart Slider 3 or Groovy Menu aren't active, as they have their own output filter. */
 		if ( ! function_exists( 'smart_slider_3_plugins_loaded' ) || ! function_exists( 'groovy_menu_init_classes' ) ) {
 			add_filter( 'omgf_buffer_output', [ $this, 'parse' ] );
 		}
 
 		add_filter( 'omgf_buffer_output', [ $this, 'add_success_message' ] );
-
-		/** Groovy Menu compatibility */
-		add_filter( 'groovy_menu_final_output', [ $this, 'parse' ], 11 );
-
-		/** Smart Slider 3 compatibility */
-		add_filter( 'wordpress_prepare_output', [ $this, 'parse' ], 11 );
-
-		/** Mesmerize Pro theme compatibility */
-		add_filter( 'style_loader_tag', [ $this, 'remove_mesmerize_filter' ], 12, 1 );
 	}
 
 	/**
@@ -185,7 +195,7 @@ class Process {
 				);
 
 				/**
-				 * @since v5.3.0 Store all preloaded URLs temporarily, to make sure no duplicate files (Variable Fonts) are preloaded.
+				 * @since v5.3.0 Store all preloaded URLs temporarily to make sure no duplicate files (Variable Fonts) are preloaded.
 				 */
 				$preloaded = [];
 
@@ -196,12 +206,22 @@ class Process {
 					 * @since v5.5.4 Since we're forcing relative URLs since v5.5.0, let's make sure $url is a relative URL to ensure
 					 *               backwards compatibility.
 					 */
-					$url = str_replace( [ 'http:', 'https:' ], '', $url );
+					$url_parts = parse_url( $url );
+
+					if ( ! empty( $url_parts[ 'host' ] ) && ! empty( $url_parts[ 'path' ] ) ) {
+						$url = '//' . $url_parts[ 'host' ] . $url_parts[ 'path' ]; // @codeCoverageIgnore
+					} else {
+						$url = str_replace( [ 'http:', 'https:' ], '', $url );
+					}
 
 					/**
 					 * @since v5.0.1 An extra check, because people tend to forget to flush their caches when changing fonts, etc.
 					 */
-					$file_path = str_replace( OMGF_UPLOAD_URL, OMGF_UPLOAD_DIR, apply_filters( 'omgf_frontend_process_url', $url ) );
+					$file_path = str_replace(
+						OMGF_UPLOAD_URL,
+						OMGF_UPLOAD_DIR,
+						apply_filters( 'omgf_frontend_process_url', $url )
+					);
 
 					if ( ! defined( 'DAAN_DOING_TESTS' ) && ! file_exists( $file_path ) || in_array( $url, $preloaded ) ) {
 						continue; // @codeCoverageIgnore
@@ -209,8 +229,11 @@ class Process {
 
 					$preloaded[] = $url;
 					$timestamp   = OMGF::get_option( Settings::OMGF_CACHE_TIMESTAMP );
-					$url         = "$url?ver=$timestamp";
+					$url         .= str_contains( $url, '?' ) ? "&ver=$timestamp" : "?ver=$timestamp";
 
+					/**
+					 * We can't use @see wp_kses_post() here, because it removes link elements.
+					 */
 					echo wp_kses(
 						"<link id='omgf-preload-$i' rel='preload' href='$url' as='font' type='font/woff2' crossorigin />\n",
 						self::PRELOAD_ALLOWED_HTML
@@ -223,7 +246,7 @@ class Process {
 	}
 
 	/**
-	 * Start output buffer.
+	 * Start the output buffer.
 	 *
 	 * @action template_redirect
 	 * @return bool|string valid HTML.
@@ -231,29 +254,42 @@ class Process {
 	 * @codeCoverageIgnore
 	 */
 	public function maybe_buffer_output() {
-		/**
-		 * Always run, if the omgf_optimize parameter (added by Save & Optimize) is set.
-		 */
-		if ( isset( $_GET[ 'omgf_optimize' ] ) ) {
-			do_action( 'omgf_frontend_process_before_ob_start' );
+		if ( ! self::should_start() ) {
+			return false;
+		}
 
-			return ob_start( [ $this, 'return_buffer' ] );
+		do_action( 'omgf_frontend_process_before_ob_start' );
+
+		return ob_start( [ $this, 'return_buffer' ] );
+	}
+
+	/**
+	 * Should we start the buffer?
+	 *
+	 * @return bool
+	 */
+	public static function should_start() {
+		/**
+		 * Always run if the omgf_optimize parameter (added by Save & Optimize) is set.
+		 */
+		if ( self::query_param_exists( 'omgf_optimize' ) ) {
+			return true;
 		}
 
 		/**
 		 * Make sure Page Builder previews don't get optimized content.
 		 */
-		foreach ( $this->page_builders as $page_builder ) {
-			if ( array_key_exists( $page_builder, $_GET ) ) {
+		foreach ( self::$page_builders as $page_builder ) {
+			if ( self::query_param_exists( $page_builder ) ) {
 				return false;
 			}
 		}
 
 		/**
-		 * Make sure editors in post types don't get optimized content.
+		 * Make sure editors in post-types don't get optimized content.
 		 */
 		foreach ( self::$post_types as $post_type ) {
-			if ( array_key_exists( $post_type, $_GET ) ) {
+			if ( self::query_param_exists( $post_type ) ) {
 				return false;
 			}
 		}
@@ -261,8 +297,8 @@ class Process {
 		/**
 		 * Post edit actions
 		 */
-		if ( array_key_exists( 'action', $_GET ) ) {
-			if ( in_array( $_GET[ 'action' ], $this->edit_actions, true ) ) {
+		if ( self::query_param_exists( 'action' ) ) {
+			if ( in_array( $_GET[ 'action' ], self::$edit_actions, true ) ) {
 				return false;
 			}
 		}
@@ -272,7 +308,7 @@ class Process {
 		 *
 		 * @see https://www.modpagespeed.com/doc/experiment#ModPagespeed
 		 */
-		if ( array_key_exists( 'PageSpeed', $_GET ) && 'off' === $_GET[ 'PageSpeed' ] ) {
+		if ( self::query_param_exists( 'PageSpeed' ) && 'off' === $_GET[ 'PageSpeed' ] ) {
 			return false;
 		}
 
@@ -280,15 +316,23 @@ class Process {
 		 * Customizer previews shouldn't get optimized content.
 		 */
 		if ( function_exists( 'is_customize_preview' ) && is_customize_preview() ) {
-			return false;
+			return false; // @codeCoverageIgnore
 		}
 
-		do_action( 'omgf_frontend_process_before_ob_start' );
+		return true;
+	}
 
-		/**
-		 * Let's GO!
-		 */
-		ob_start( [ $this, 'return_buffer' ] );
+	/**
+	 * A simple wrapper that makes sure the $_GET array is set, because in faulty setups, this might be the case.
+	 *
+	 * @see https://wordpress.org/support/topic/uncaught-typeerror-in-process-php/
+	 *
+	 * @param $array
+	 *
+	 * @return bool
+	 */
+	private static function query_param_exists( $key ) {
+		return ! empty( $_GET ) && array_key_exists( $key, $_GET );
 	}
 
 	/**
@@ -406,16 +450,22 @@ class Process {
 		}
 
 		/**
-		 * @since v5.4.0 This approach is global on purpose. By just matching <link> elements containing the fonts.googleapis.com/css string,
-		 *                e.g. preload elements are also properly processed.
-		 * @since v5.4.0 Added compatibility for BunnyCDN's "GDPR compliant" Google Fonts API.
-		 * @since v5.4.1 Make sure hitting the domain, not a subfolder generated by some plugins.
-		 * @since v5.5.0 Added compatibility for WP.com's "GDPR compliant" Google Fonts API.
+		 * @filter omgf_frontend_process_parse_links
+		 *
+		 * @since  v5.4.0 This approach is global on purpose. By just matching <link> elements containing the fonts.googleapis.com/css string
+		 *                e.g., preload elements are also properly processed.
+		 * @since  v5.4.0 Added compatibility for BunnyCDN's "GDPR compliant" Google Fonts API.
+		 * @since  v5.4.1 Make sure hitting the domain, not a subfolder generated by some plugins.
+		 * @since  v5.5.0 Added compatibility for WP.com's "GDPR compliant" Google Fonts API.
 		 */
 		$links = array_filter(
 			$links[ 0 ],
 			function ( $link ) {
-				return str_contains( $link, 'fonts.googleapis.com/css' ) || str_contains( $link, 'fonts.bunny.net/css' ) || str_contains( $link, 'fonts-api.wp.com/css' );
+				return apply_filters(
+					'omgf_frontend_process_parse_links',
+					str_contains( $link, 'fonts.googleapis.com/css' ) || str_contains( $link, 'fonts.bunny.net/css' ) || str_contains( $link, 'fonts-api.wp.com/css' ),
+					$link
+				);
 			}
 		);
 
@@ -468,7 +518,7 @@ class Process {
 			preg_match( '/id=[\'"](?P<id>.*?)[\'"]/', $link, $id );
 
 			/**
-			 * @var string $id Fallback to empty string if no id attribute exists.
+			 * @var array $id Fallback to empty string if no id attribute exists.
 			 */
 			$id = $this->strip_css_tag( $id[ 'id' ] ?? '' );
 
@@ -482,88 +532,24 @@ class Process {
 			}
 
 			/**
-			 * Mesmerize Theme compatibility
-			 */
-			if ( $href[ 'href' ] === '#' ) {
-				preg_match( '/data-href=[\'"](?P<href>.*?)[\'"]/', $link, $href );
-			}
-
-			/**
-			 * If no valid id attribute was found then this means that this stylesheet wasn't enqueued
+			 * If no valid id attribute was found, then this means that this stylesheet wasn't enqueued
 			 * using proper WordPress conventions. We generate our own using the length of the href attribute
 			 * to serve as a UID. This prevents clashes with other non-properly enqueued stylesheets on other pages.
 			 *
 			 * @since v5.1.4
+			 *
+			 * @var string $id
 			 */
 			if ( ! $id ) {
-				$id = "$handle-" . strlen( $href[ 'href' ] );
+				$id = "$handle-" . strlen( $href[ 'href' ] ); // @codeCoverageIgnore
 			}
 
-			/**
-			 * Compatibility fix for Divi Builder
-			 *
-			 * @since v5.1.3 Because Divi Builder uses the same handle for Google Fonts on each page,
-			 *               even when these contain Google Fonts, let's append a (kind of) unique
-			 *               identifier to the string, to make sure we can make a difference between
-			 *               different Google Fonts configurations.
-			 * @since v5.2.0 Allow Divi/Elementor compatibility fixes to be disabled, for those who have too
-			 *               many different Google Fonts stylesheets configured throughout their pages and
-			 *               blame OMGF for the fact that it detects all those different stylesheets. :-/
-			 */
-			if ( OMGF::get_option( Settings::OMGF_ADV_SETTING_COMPATIBILITY ) && str_contains( $id, 'et-builder-googlefonts' ) ) {
-				$google_fonts[ $key ][ 'id' ] = $id . '-' . strlen( $href[ 'href' ] ); // @codeCoverageIgnore
-			} elseif ( OMGF::get_option( Settings::OMGF_ADV_SETTING_COMPATIBILITY ) && $id === 'google-fonts-1' ) {
-				/**
-				 * Compatibility fix for Elementor
-				 *
-				 * @since v5.1.4 Because Elementor uses the same (annoyingly generic) handle for Google Fonts
-				 *               stylesheets on each page, even when these contain different Google Fonts than
-				 *               other pages, let's append a (kind of) unique identifier to the string, to make
-				 *               sure we can make a difference between different Google Fonts configurations.
-				 */
-				$google_fonts[ $key ][ 'id' ] = str_replace( '-1', '-' . strlen( $href[ 'href' ] ), $id ); // @codeCoverageIgnore
-			} elseif ( str_contains( $id, 'sp-wpcp-google-fonts' ) ) {
-				/**
-				 * Compatibility fix for Category Slider Pro for WooCommerce by ShapedPlugin
-				 *
-				 * @since v5.3.7 This plugin finds it necessary to provide each Google Fonts stylesheet with a
-				 *               unique identifier on each pageload, to make sure its never cached. The worst idea ever.
-				 *               On top of that, it throws OMGF off the rails entirely, eventually crashing the site.
-				 */
-				$google_fonts[ $key ][ 'id' ] = 'sp-wpcp-google-fonts'; // @codeCoverageIgnore
-			} elseif ( str_contains( $id, 'sp-lc-google-fonts' ) ) {
-				/**
-				 * Compatibility fix for Logo Carousel Pro by ShapedPlugin
-				 *
-				 * @since v5.3.8 Same reason as above.
-				 */
-				$google_fonts[ $key ][ 'id' ] = 'sp-lc-google-fonts'; // @codeCoverageIgnore
-			} elseif ( str_contains( $id, 'custom_fonts_' ) ) {
-				/**
-				 * Compatibility fix for Fruitful theme by Fruitful Code.
-				 *
-				 * @since v5.9.1 Same reason as above.
-				 */
-				$google_fonts[ $key ][ 'id' ] = 'custom_fonts'; // @codeCoverageIgnore
-			} elseif ( apply_filters( 'omgf_frontend_process_convert_pro_compatibility', str_contains( $id, 'cp-google-fonts' ) ) ) {
-				/**
-				 * Compatibility fix for Convert Pro by Brainstorm Force
-				 *
-				 * @since  v5.5.4 Same reason as above, although it kind of makes sense in this case (since Convert Pro allows
-				 *               to create pop-ups and people tend to get creative. I just hope the ID isn't random.)
-				 * @filter omgf_frontend_process_convert_pro_compatibility Allows people to disable this feature, in case the different
-				 *         stylesheets are actually needed.
-				 */
-				$google_fonts[ $key ][ 'id' ] = 'cp-google-fonts'; // @codeCoverageIgnore
-			} else {
-				$google_fonts[ $key ][ 'id' ] = $id;
-			}
-
+			$google_fonts[ $key ][ 'id' ]   = apply_filters( 'omgf_frontend_process_fonts_set', $id, $href );
 			$google_fonts[ $key ][ 'link' ] = $link;
 			/**
 			 * This is used for search/replace later on. This shouldn't be tampered with.
 			 */
-			$google_fonts[ $key ][ 'href' ] = $href[ 'href' ];
+			$google_fonts[ $key ][ 'href' ] = apply_filters( 'omgf_frontend_process_fonts_set_href', $href[ 'href' ], $link );
 		}
 
 		return $google_fonts;
@@ -616,14 +602,17 @@ class Process {
 			$original_handle = $handle;
 
 			/**
-			 * If stylesheet with $handle is completely marked for unload, just remove the element
+			 * If the stylesheet with $handle is completely marked for unloading, just remove the element
 			 * to prevent it from loading.
 			 */
-			if ( apply_filters( 'omgf_unloaded_stylesheets', OMGF::unloaded_stylesheets() && in_array( $handle, OMGF::unloaded_stylesheets() ) ) ) {
-				$search[ $key ]  = $stack[ 'link' ];
-				$replace[ $key ] = '';
+			if ( apply_filters(
+				'omgf_unloaded_stylesheets',
+				OMGF::unloaded_stylesheets() && in_array( $handle, OMGF::unloaded_stylesheets() )
+			) ) {
+				$search[ $key ]  = $stack[ 'link' ]; // @codeCoverageIgnore
+				$replace[ $key ] = ''; // @codeCoverageIgnore
 
-				continue;
+				continue; // @codeCoverageIgnore
 			}
 
 			$cache_key = OMGF::get_cache_key( $stack[ 'id' ] );
@@ -690,9 +679,9 @@ class Process {
 		$found_iframes = OMGF::get_option( Settings::OMGF_FOUND_IFRAMES, [] );
 		$count_iframes = count( $found_iframes );
 
-		foreach ( TaskManager::IFRAMES_LOADING_FONTS as $script_id => $script ) {
+		foreach ( Dashboard::IFRAMES_LOADING_FONTS as $script_id => $script ) {
 			if ( str_contains( $html, $script ) && ! in_array( $script_id, $found_iframes ) ) {
-				$found_iframes[] = $script_id;
+				$found_iframes[] = $script_id; // @codeCoverageIgnore
 			}
 		}
 
@@ -709,7 +698,7 @@ class Process {
 	 * @return string
 	 */
 	public function add_success_message( $html ) {
-		if ( ! isset( $_GET[ 'omgf_optimize' ] ) || wp_doing_ajax() ) {
+		if ( ! isset( $_GET[ 'omgf_optimize' ] ) || wp_doing_ajax() || ! current_user_can( 'manage_options' ) ) {
 			return $html;
 		}
 
@@ -720,25 +709,11 @@ class Process {
 		}
 
 		$message_div = '<div class="omgf-optimize-success-message" style="padding: 25px 15px 15px; background-color: #fff; border-left: 3px solid #00a32a; border-top: 1px solid #c3c4c7; border-bottom: 1px solid #c3c4c7; border-right: 1px solid #c3c4c7; margin: 5px 20px 15px; font-family: Arial, \'Helvetica Neue\', sans-serif; font-weight: bold; font-size: 13px; color: #3c434a;"><span>%s</span></div>';
+		$message     = sprintf(
+			__( 'Google Fonts optimization completed. Return to the <a href="%s">settings screen</a> to see the results.', 'host-webfonts-local' ),
+			admin_url( 'options-general.php?page=' . Settings::OMGF_ADMIN_PAGE )
+		);
 
-		return $parts[ 0 ] . $parts[ 1 ] . sprintf( $message_div, __( 'Cache refreshed successful!', 'host-webfonts-local' ) ) . $parts[ 2 ];
-	}
-
-	/**
-	 * Because all great themes come packed with extra Cumulative Layout Shifting.
-	 *
-	 * @since v5.4.3 Added compatibility for Highlight Pro; a Mesmerize based theme and Mesmerize,
-	 *               the non-premium theme.
-	 *
-	 * @param string $tag
-	 *
-	 * @return string
-	 */
-	public function remove_mesmerize_filter( $tag ) {
-		if ( ( wp_get_theme()->template === 'mesmerize-pro' || wp_get_theme()->template === 'highlight-pro' || wp_get_theme()->template === 'mesmerize' ) && str_contains( $tag, 'fonts.googleapis.com' ) ) {
-			return str_replace( 'href="" data-href', 'href', $tag );
-		}
-
-		return $tag;
+		return $parts[ 0 ] . $parts[ 1 ] . sprintf( $message_div, $message ) . $parts[ 2 ];
 	}
 }

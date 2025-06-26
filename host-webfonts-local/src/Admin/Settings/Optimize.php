@@ -10,15 +10,15 @@
 *
 * @package  : OMGF
 * @author   : Daan van den Bergh
-* @copyright: © 2024 Daan van den Bergh
+* @copyright: © 2025 Daan van den Bergh
 * @url      : https://daan.dev
 * * * * * * * * * * * * * * * * * * * */
 
 namespace OMGF\Admin\Settings;
 
-use OMGF\Helper as OMGF;
+use OMGF\Admin\Dashboard;
 use OMGF\Admin\Settings;
-use OMGF\TaskManager;
+use OMGF\Helper as OMGF;
 
 defined( 'ABSPATH' ) || exit; // @codeCoverageIgnore
 
@@ -26,8 +26,6 @@ defined( 'ABSPATH' ) || exit; // @codeCoverageIgnore
  * @codeCoverageIgnore
  */
 class Optimize extends Builder {
-	const FFW_PRESS_OMGF_AF_URL = 'https://daan.dev/wordpress/omgf-additional-fonts/';
-
 	/** @var array $optimized_fonts */
 	private $optimized_fonts = [];
 
@@ -39,50 +37,27 @@ class Optimize extends Builder {
 
 		$this->title = __( 'Optimize Local Google Fonts', 'host-webfonts-local' );
 
-		add_action( 'omgf_optimize_settings_content', [ $this, 'do_title' ], 10 );
-		add_action( 'omgf_optimize_settings_content', [ $this, 'do_description' ], 11 );
+		add_action( 'omgf_optimize_settings_content', [ $this, 'open_task_manager' ], 20 );
+		add_action( 'omgf_optimize_settings_content', [ $this, 'do_before' ], 22 );
+		add_action( 'omgf_optimize_settings_content', [ Dashboard::class, 'render_warnings' ], 24 );
+		add_action( 'omgf_optimize_settings_content', [ Dashboard::class, 'render_status' ], 26 );
+		add_action( 'omgf_optimize_settings_content', [ $this, 'do_google_fonts_checker' ], 28 );
+		add_action( 'omgf_optimize_settings_content', [ $this, 'do_cache_management' ], 30 );
+		add_action( 'omgf_optimize_settings_content', [ $this, 'do_after' ], 30 );
+		add_action( 'omgf_optimize_settings_content', [ $this, 'close_task_manager' ], 31 );
 
-		add_action( 'omgf_optimize_settings_content', [ $this, 'open_task_manager' ], 23 );
-		add_action( 'omgf_optimize_settings_content', [ $this, 'do_before' ], 24 );
-		add_action( 'omgf_optimize_settings_content', [ $this, 'task_manager_status' ], 25 );
-		add_action( 'omgf_optimize_settings_content', [ $this, 'do_after' ], 26 );
-		add_action( 'omgf_optimize_settings_content', [ $this, 'close_task_manager' ], 27 );
-
-		add_action( 'omgf_optimize_settings_content', [ $this, 'do_before' ], 30 );
-		add_action( 'omgf_optimize_settings_content', [ $this, 'do_display_option' ], 40 );
-		add_action( 'omgf_optimize_settings_content', [ $this, 'do_promo_apply_font_display_globally' ], 50 );
-		add_action( 'omgf_optimize_settings_content', [ $this, 'do_promo_remove_async_google_fonts' ], 60 );
-		add_action( 'omgf_optimize_settings_content', [ $this, 'do_after' ], 100 );
-
-		add_action( 'omgf_optimize_settings_content', [ $this, 'do_optimize_fonts_container' ], 200 );
-		add_action( 'omgf_optimize_settings_content', [ $this, 'do_optimize_fonts_contents' ], 250 );
+		add_action( 'omgf_optimize_settings_content', [ $this, 'do_optimize_fonts_container' ], 40 );
+		add_action( 'omgf_optimize_settings_content', [ $this, 'do_before' ], 50 );
+		add_action( 'omgf_optimize_settings_content', [ $this, 'do_display_option' ], 60 );
+		add_action( 'omgf_optimize_settings_content', [ $this, 'do_promo_apply_font_display_globally' ], 70 );
+		add_action( 'omgf_optimize_settings_content', [ $this, 'do_promo_auto_preload' ], 80 );
+		add_action( 'omgf_optimize_settings_content', [ $this, 'do_after' ], 90 );
+		add_action( 'omgf_optimize_settings_content', [ $this, 'do_optimize_fonts_contents' ], 100 );
 		add_action( 'omgf_optimize_settings_content', [ $this, 'close_optimize_fonts_container' ], 300 );
 
 		add_action( 'omgf_optimize_settings_content', [ $this, 'do_before' ], 350 );
 		add_action( 'omgf_optimize_settings_content', [ $this, 'do_test_mode' ], 375 );
 		add_action( 'omgf_optimize_settings_content', [ $this, 'do_after' ], 400 );
-	}
-
-	/**
-	 *
-	 */
-	public function do_description() { ?>
-		<p>
-			<?php echo __(
-				'These settings affect the downloaded files and generated stylesheet(s). If you\'re simply looking to replace your Google Fonts for locally hosted copies, the default settings should suffice.',
-				'host-webfonts-local'
-			); ?>
-		</p>
-		<p>
-			<?php echo sprintf(
-				__(
-					'To install additional Google Fonts, an add-on is required, which can be downloaded <a href="%s" target="blank">here</a>.',
-					'host-webfonts-local'
-				),
-				self::FFW_PRESS_OMGF_AF_URL
-			); ?>
-		</p>
-		<?php
 	}
 
 	/**
@@ -92,158 +67,76 @@ class Optimize extends Builder {
 	 */
 	public function open_task_manager() {
 		?>
-		<div class="omgf-task-manager postbox" style="padding: 0 15px 5px;">
-		<h3><?php echo __( 'Task Manager', 'host-webfonts-local' ); ?></h3>
-		<p class="description">
-			<?php echo __(
-				'A quick overview of all found Google Fonts stylesheets (and their status) currently saved on (and served from) your server.',
-				'host-webfonts-local'
+		<div class="omgf-task-manager postbox">
+		<h3><?php echo __( 'Dashboard', 'host-webfonts-local' ); ?></h3>
+		<p>
+			<?php echo apply_filters(
+				'omgf_dashboard_intro',
+				__(
+					'OMGF (Optimize My Google Fonts) automatically replaces Google Fonts stylesheets (e.g. https://fonts.googleapis.com/css?family=Open+Sans) with locally hosted copies. To remove/unload Google Fonts entirely or by style/weight, go to <a href="#omgf-manage-optimized-fonts">Optimize Local Fonts</a>.',
+					'host-webfonts-local'
+				),
 			); ?>
 		</p>
+		<?php
+	}
+
+	public function do_google_fonts_checker() {
+		?>
+		<tr>
+			<?php
+			$this->do_checkbox(
+				__( 'Run Google Fonts Checker in the background (Pro)', 'host-webfonts-local' ),
+				'google_fonts_checker', ! empty( OMGF::get_option( 'google_fonts_checker' ) ),
+				sprintf(
+					__(
+						'Normally, the Google Fonts Checker only runs for logged-in administrators. If you want to organically scan all your pages for Google Fonts, enable this option. %s',
+						'host-webfonts-local'
+					),
+					$this->promo
+				), ! defined( 'OMGF_PRO_ACTIVE' )
+			); ?>
+			<?php
+			$this->do_select(
+				__( 'Disable Google Fonts Checker after... (Pro)', 'host-webfonts-local' ),
+				'checker_timeout',
+				[
+					'7'      => __( '7 Days (default)', 'host-webfonts-local' ),
+					'14'     => __( '14 Days', 'host-webfonts-local' ),
+					'30'     => __( '1 Month', 'host-webfonts-local' ),
+					'always' => __( 'Always', 'host-webfonts-local' ),
+				],
+				OMGF::get_option( 'checker_timeout', 7 ),
+				sprintf(
+					__(
+						'When enabled, the Google Fonts Checker loads a tiny snippet (<3KB) of JS code in your frontend. While the impact is barely noticeable, it\'s advised to run it only for a set period of time e.g. after you first installed OMGF Pro, switched themes or installed plugins. %s',
+						'host-webfonts-local'
+					),
+					$this->promo
+				),
+				false, ! defined( 'OMGF_PRO_ACTIVE' ) || empty( OMGF::get_option( 'google_fonts_checker' ) )
+			); ?>
+		</tr>
 		<?php
 	}
 
 	/**
 	 * @return void
 	 */
-	public function task_manager_status() {
-		$stylesheets          = OMGF::admin_optimized_fonts();
-		$unloaded_stylesheets = OMGF::unloaded_stylesheets();
-		?>
-		<?php TaskManager::render_warnings(); ?>
-		<tr valign="top">
-			<th scope="row"><?php echo __( 'Cache Status', 'host-webfonts-local' ); ?></th>
-			<td class="task-manager-row">
-				<?php if ( ! empty( $stylesheets ) ) : ?>
-					<ul>
-						<?php foreach ( $stylesheets as $handle => $contents ) : ?>
-							<?php
-							$cache_key = OMGF::get_cache_key( $handle );
-
-							if ( ! $cache_key ) {
-								$cache_key = $handle;
-							}
-
-							$downloaded = file_exists( OMGF_UPLOAD_DIR . "/$cache_key/$cache_key.css" );
-							$unloaded   = in_array( $handle, $unloaded_stylesheets );
-							?>
-							<li class="<?php echo OMGF_CACHE_IS_STALE ? 'stale' : ( $unloaded ? 'unloaded' : ( $downloaded ? 'found' : 'not-found' ) ); ?>">
-								<strong><?php echo $handle; ?></strong> <em>(<?php echo sprintf(
-										__( 'stored in %s', 'host-webfonts-local' ),
-										str_replace( ABSPATH, '', OMGF_UPLOAD_DIR . "/$cache_key" )
-									); ?>)</em>
-								<?php
-								if ( ! $unloaded ) :
-									?>
-									<a href="<?php echo $downloaded ? "#$handle" : '#'; ?>"
-									   data-handle="<?php echo esc_attr( $handle ); ?>"
-									   class="<?php echo $downloaded ? 'omgf-manage-stylesheet' : 'omgf-remove-stylesheet'; ?>"
-									   title="<?php echo sprintf(
-										   __( 'Manage %s', 'host-webfonts-local' ),
-										   $cache_key
-									   ); ?>"><?php $downloaded ? _e( 'Configure', 'host-webfonts-local' ) : _e( 'Remove', 'host-webfonts-local' ); ?></a><?php endif; ?>
-							</li>
-						<?php endforeach; ?>
-						<?php if ( OMGF_CACHE_IS_STALE ) : ?>
-							<li class="stale-cache-notice"><em><?php echo __(
-										'The stylesheets in the cache do not reflect the current settings. Either <a href="#" id="omgf-cache-refresh">refresh</a> the cache (and maintain settings) or <a href="#" id="omgf-cache-flush">flush</a> it and start over.',
-										'host-webfonts-local'
-									); ?></em></li>
-						<?php endif; ?>
-					</ul>
-				<?php else : ?>
-					<p>
-						<?php echo __(
-							'No stylesheets found. <a href="#" id="omgf-save-optimize">Start optimization</a>?',
-							'host-webfonts-local'
-						); ?><?php echo OMGF::get_option( Settings::OMGF_OPTIMIZE_HAS_RUN ) ? sprintf(
-							__(
-								'(If optimization seems to be failing, read <a href="%s" target="_blank">this</a>.)',
-								'host-webfonts-local'
-							),
-							'https://daan.dev/docs/omgf-pro-troubleshooting/no-fonts-detected/'
-						) : ''; ?>
-					</p>
-				<?php endif; ?>
-			</td>
-		</tr>
-		<tr>
-			<th scope="row"><?php _e( 'Legend', 'host-webfonts-local' ); ?></th>
-			<td class="task-manager-row">
-				<ul>
-					<li class="found"> <?php _e(
-							'<strong>Found</strong>. Stylesheet exists on your file system.',
-							'host-webfonts-local'
-						); ?></li>
-					<li class="unloaded"> <?php _e(
-							'<strong>Unloaded</strong>. Stylesheet exists, but is not loaded in the frontend.',
-							'host-webfonts-local'
-						); ?></li>
-					<li class="stale"> <?php _e(
-							'<strong>Stale</strong>. Settings were changed and the stylesheet\'s content do not reflect those changes.',
-							'host-webfonts-local'
-						); ?></li>
-					<li class="not-found"> <?php _e(
-							'<strong>Not Found</strong>. Stylesheet was detected once, but is missing now. You can safely remove it.',
-							'host-webfonts-local'
-						); ?></li>
-				</ul>
-			</td>
-		</tr>
-		<?php
-		$this->do_checkbox(
-			__( 'Auto-Configure Subsets', 'host-webfonts-local' ),
-			Settings::OMGF_OPTIMIZE_SETTING_AUTO_SUBSETS, ! empty( OMGF::get_option( Settings::OMGF_OPTIMIZE_SETTING_AUTO_SUBSETS ) ),
-			sprintf(
-				__(
-					'When this option is checked, %s will set the <strong>Used Subset(s)</strong> option to only use subsets that\'re available for <u>all</u> detected font families. Novice users are advised to leave this enabled.',
-					'host-webfonts-local'
-				),
-				apply_filters( 'omgf_settings_page_title', 'OMGF' )
-			),
-			false,
-			'task-manager-row'
-		);
-		$this->do_checkbox(
-			__( 'Auto-Configure Adv. Processing (Pro)', 'host-webfonts-local' ),
-			'auto_config', ! empty( OMGF::get_option( 'auto_config' ) ),
-			sprintf(
-				__(
-					'Is %1$s not detecting all Google Fonts? Check this box <u>before</u> starting the optimization to auto-configure OMGF Pro\'s <a href="%2$s">Advanced Processing</a> features and "dig deeper" for Google Fonts where needed. Novice users are advised to leave this enabled. %3$s',
-					'host-webfonts-local'
-				),
-				apply_filters( 'omgf_settings_page_title', 'OMGF' ),
-				admin_url( 'options-general.php?page=optimize-webfonts&tab=omgf-detection-settings' ),
-				$this->promo
-			), ! defined( 'OMGF_PRO_ACTIVE' ),
-			'task-manager-row'
-		);
-		$this->do_checkbox(
-			__( 'Optimize for (D)TAP (Pro)', 'host-webfonts-local' ),
-			'dtap', ! empty( OMGF::get_option( 'dtap' ) ),
-			sprintf(
-				__(
-					'Enable this option (on all instances) if you\'re planning to use %s in a (variation of a) Development > Testing > Acceptance/Staging > Production street. %s',
-					'host-webfonts-local'
-				),
-				apply_filters( 'omgf_settings_page_title', 'OMGF' ),
-				$this->promo
-			), ! defined( 'OMGF_PRO_ACTIVE' ),
-			'task-manager-row'
-		);
+	public function do_cache_management() {
 		?>
 		<tr>
-			<th scope="row"><?php _e( 'Manage Cache', 'host-webfonts-local' ); ?></th>
+			<th class="omgf-align-row-header" scope="row"><?php _e( 'Manage Cache', 'host-webfonts-local' ); ?></th>
 			<td class="task-manager-row">
 				<a id="omgf-empty" data-init="<?php echo Settings::OMGF_ADMIN_PAGE; ?>"
 				   data-nonce="<?php echo wp_create_nonce( Settings::OMGF_ADMIN_PAGE ); ?>"
-				   class="omgf-empty button-cancel"><?php _e(
-						'Empty Cache Directory',
+				   class="omgf-empty button button-cancel"><?php _e(
+						'Empty Cache',
 						'host-webfonts-local'
 					); ?></a>
 				<a id="omgf-refresh" data-init="<?php echo Settings::OMGF_ADMIN_PAGE; ?>"
 				   data-nonce="<?php echo wp_create_nonce( Settings::OMGF_ADMIN_PAGE ); ?>"
-				   class="omgf-refresh button-cancel"><?php _e(
+				   class="omgf-refresh button button-cancel"><?php _e(
 						'Refresh Cache (and maintain settings)',
 						'host-webfonts-local'
 					); ?></a>
@@ -297,23 +190,18 @@ class Optimize extends Builder {
 	}
 
 	/**
-	 * Block Async Google Fonts option
+	 * Auto Preload Fonts (Pro) option.
 	 *
 	 * @return void
 	 */
-	public function do_promo_remove_async_google_fonts() {
+	public function do_promo_auto_preload() {
 		$this->do_checkbox(
-			__( 'Remove Async Google Fonts (Pro)', 'host-webfonts-local' ),
-			'remove_async_fonts', ! empty( OMGF::get_option( 'remove_async_fonts' ) ),
-			sprintf(
-				__(
-					'Remove Google Fonts loaded (asynchronously) by (3rd party) JavaScript libraries used by some themes/plugins. This won\'t work with embedded content (i.e. <code>iframe</code>). <strong>Warning!</strong> Make sure you load the Google Fonts, either <a href="%1$s">manually</a> or by using <a href="%2$s" target="_blank">a plugin</a> to prevent styling breaks. %3$s',
-					'host-webfonts-local'
-				),
-				'https://daan.dev/docs/omgf-pro/remove-async-google-fonts/',
-				'https://daan.dev/wordpress/omgf-additional-fonts/',
-				$this->promo
-			), ! defined( 'OMGF_PRO_ACTIVE' )
+			__( 'Smart Preload (Pro)', 'host-webfonts-local' ),
+			'auto_preload', ! empty( OMGF::get_option( 'auto_preload' ) ),
+			__(
+				'When enabled, OMGF Pro will automatically detect which Google Fonts are loaded above the fold and preload them. Preload settings can be overwritten on a per-page level by clicking <strong>Auto-configure preload settings for this page</strong> in the top Admin Bar menu.',
+				'host-webfonts-local'
+			) . ' ' . $this->promo, ! defined( 'OMGF_PRO_ACTIVE' )
 		);
 	}
 
@@ -323,6 +211,19 @@ class Optimize extends Builder {
 	public function do_optimize_fonts_container() {
 		?>
 		<div id="omgf-manage-optimized-fonts" class="omgf-optimize-fonts-container postbox">
+		<h3>
+			<?php echo __( 'Optimize Local Fonts', 'host-webfonts-local' ); ?>
+		</h3>
+		<p>
+			<?php echo sprintf(
+				__(
+					'The options below allow you to tweak the performance of all fonts detected by %s. Don\'t know where or how to start optimizing your Google Fonts? That\'s okay. <a href="%s">This guide</a> will get you sorted.',
+					'host-webfonts-local'
+				),
+				apply_filters( 'omgf_settings_page_title', 'OMGF' ),
+				'https://daan.dev/blog/how-to/wordpress-google-fonts/'
+			); ?>
+		</p>
 		<?php
 	}
 
@@ -335,25 +236,31 @@ class Optimize extends Builder {
 		 */
 		$this->optimized_fonts = OMGF::admin_optimized_fonts();
 		?>
-		<span class="option-title"><?php echo __( 'Optimize Local Fonts', 'host-webfonts-local' ); ?><span
-				class="dashicons dashicons-info tooltip"><span class="tooltip-text"><span
-						class="inline-text"><?php echo sprintf(
+		<div class="omgf-optimize-fonts-contents">
+		<span class="option-title">
+			<?php echo __( 'Local Fonts', 'host-webfonts-local' ); ?>
+			<span class="dashicons dashicons-info tooltip">
+				<span class="tooltip-text">
+					<span class="inline-text"><?php echo sprintf(
 							__(
-								'All fonts listed here are loaded locally. Don\'t know where or how to start optimizing your Google Fonts? That\'s okay. <a href="%s">This guide</a> will get you sorted.',
+								'This list is populated with all Google Fonts stylesheets captured and downloaded throughout your site. It will grow organically when other Google Fonts stylesheets are discovered.',
 								'host-webfonts-local'
 							),
 							'https://daan.dev/blog/how-to/wordpress-google-fonts/'
-						); ?></span></span></span></span>
-		<?php if ( ! empty( $this->optimized_fonts ) ) : ?>
-			<?php echo $this->do_optimized_fonts_manager(); ?>
-		<?php else : ?>
-			<div class="omgf-optimize-fonts-description">
-				<?php
-				$this->do_optimize_fonts_section();
-				?>
-			</div>
+						); ?></span>
+				</span>
+			</span>
+		</span>
+			<?php if ( ! empty( $this->optimized_fonts ) ) : ?>
+				<?php $this->do_optimized_fonts_manager(); ?>
+			<?php else : ?>
+				<div class="omgf-optimize-fonts-description">
+					<?php $this->do_optimize_fonts_section(); ?>
+				</div>
+			<?php
+			endif; ?>
+		</div>
 		<?php
-		endif;
 	}
 
 	/**
@@ -380,19 +287,6 @@ class Optimize extends Builder {
 						'https://daan.dev/docs/omgf-pro/optimize-local-fonts/'
 					); ?>
 				</p>
-			</div>
-			<div class="omgf-optimize-fonts-tooltip">
-				<ul>
-					<li class="dashicons-before dashicons-info-outline">
-						<em><?php echo sprintf(
-								__(
-									'This list is populated with all Google Fonts stylesheets captured and downloaded throughout your site. It will grow organically when other Google Fonts stylesheets are discovered.',
-									'host-webfonts-local'
-								),
-								get_site_url()
-							); ?></em>
-					</li>
-				</ul>
 			</div>
 			<?php
 			/**
@@ -449,7 +343,8 @@ class Optimize extends Builder {
 				</tr>
 				</thead>
 				<?php
-				$cache_handles = OMGF::cache_keys();
+				$cache_handles   = OMGF::cache_keys();
+				$disable_preload = apply_filters( 'omgf_local_fonts_disable_preload', false );
 				?>
 				<?php foreach ( $this->optimized_fonts as $handle => $fonts ) : ?>
 					<?php
@@ -474,52 +369,27 @@ class Optimize extends Builder {
 							<td colspan="5">
                                 <span class="family"><em><?php echo esc_html(
 											rawurldecode( $font->family )
-										); ?></em></span> <span
-									class="unload-mass-action">(<a class="unload-italics"><?php echo esc_html__(
+										); ?></em></span> <span class="unload-mass-action">(<a class="unload-italics"><?php echo esc_html__(
 											'Unload italics',
 											'host-webfonts-local'
-										); ?></a> <span class="dashicons dashicons-info tooltip"><span
-											class="tooltip-text"><?php echo __(
+										); ?></a> <span class="dashicons dashicons-info tooltip"><span class="tooltip-text"><?php echo __(
 												'In most situations you can safely unload all Italic font styles. Modern browsers are capable of mimicking Italic font styles.',
 												'host-webfonts-local'
-											); ?></span></span> | <a class="unload-all"><?php echo esc_html__(
-											'Unload all',
-											'host-webfonts-local'
-										); ?></a> | <a class="load-all"><?php echo esc_html__(
+											); ?></span></span> | <a class="unload-all"><?php echo esc_html__( 'Unload all', 'host-webfonts-local' ); ?></a> | <a class="load-all"><?php echo esc_html__(
 											'Load all',
 											'host-webfonts-local'
-										); ?></a>)</span>
-							</td>
+										); ?></a>)</span></td>
 							<td class="fallback-font-stack">
-								<select data-handle="<?php echo esc_attr( $handle ); ?>"
-										data-font-id="<?php echo esc_attr(
-											$handle . '-' . $font->id
-										); ?>" <?php echo esc_attr(
-									! defined( 'OMGF_PRO_ACTIVE' ) ? 'disabled' : ''
-								); ?>name="omgf_pro_fallback_font_stack[<?php echo esc_attr(
-									$handle
-								); ?>][<?php echo esc_attr( $font->id ); ?>]">
-									<option value=''><?php echo esc_attr__(
-											'None (default)',
-											'host-webfonts-local'
-										); ?></option>
-									<?php foreach (
-										apply_filters(
-											'omgf_pro_fallback_font_stacks',
-											Settings::OMGF_FALLBACK_FONT_STACKS_OPTIONS
-										) as $value => $label
-									) : ?>
+								<select data-handle="<?php echo esc_attr( $handle ); ?>" data-font-id="<?php echo esc_attr( $handle . '-' . $font->id ); ?>" <?php echo esc_attr(
+									! defined( 'OMGF_PRO_ACTIVE' ) ? 'disabled="disabled"' : ''
+								); ?> name="omgf_pro_fallback_font_stack[<?php echo esc_attr( $handle ); ?>][<?php echo esc_attr( $font->id ); ?>]">
+									<option value=''><?php echo esc_attr__( 'None (default)', 'host-webfonts-local' ); ?></option>
+									<?php foreach ( apply_filters( 'omgf_pro_fallback_font_stacks', Settings::OMGF_FALLBACK_FONT_STACKS_OPTIONS ) as $value => $label ) : ?>
 										<option <?php echo esc_attr(
-											defined( 'OMGF_PRO_ACTIVE' ) && isset(
-												OMGF::get_option(
-													'omgf_pro_fallback_font_stack'
-												)[ $handle ][ $font->id ]
-											) && OMGF::get_option(
-												'omgf_pro_fallback_font_stack'
-											)[ $handle ][ $font->id ] === $value ? 'selected' : ''
-										); ?> value="<?php echo esc_attr( $value ); ?>"><?php echo esc_html(
-												$label
-											); ?></option>
+											defined( 'OMGF_PRO_ACTIVE' ) &&
+											isset( OMGF::get_option( 'omgf_pro_fallback_font_stack' )[ $handle ][ $font->id ] ) &&
+											OMGF::get_option( 'omgf_pro_fallback_font_stack' )[ $handle ][ $font->id ] === $value ? 'selected' : ''
+										); ?> value="<?php echo esc_attr( $value ); ?>"><?php echo esc_html( $label ); ?></option>
 									<?php endforeach; ?>
 								</select>
 							</td>
@@ -529,9 +399,7 @@ class Optimize extends Builder {
 								isset( OMGF::get_option( 'omgf_pro_replace_font' )[ $handle ][ $font->id ] ) &&
 								OMGF::get_option( 'omgf_pro_replace_font' )[ $handle ][ $font->id ] === 'on' ? 'checked' : '';
 								$fallback = defined( 'OMGF_PRO_ACTIVE' ) && isset(
-										OMGF::get_option(
-											'omgf_pro_fallback_font_stack'
-										)[ $handle ][ $font->id ]
+										OMGF::get_option( 'omgf_pro_fallback_font_stack' )[ $handle ][ $font->id ]
 									) && OMGF::get_option( 'omgf_pro_fallback_font_stack' )[ $handle ][ $font->id ] !== '';
 								?>
 								<?php do_action( 'omgf_optimize_local_fonts_replace', $handle, $font->id ); ?>
@@ -581,14 +449,9 @@ class Optimize extends Builder {
 								<td><?php echo esc_attr( $variant->fontStyle ); ?></td>
 								<td><?php echo esc_attr( $variant->fontWeight ); ?></td>
 								<td class="preload-<?php echo esc_attr( $class ); ?>">
-									<input type="hidden"
-										   name="<?php echo esc_attr(
-											   Settings::OMGF_OPTIMIZE_SETTING_PRELOAD_FONTS
-										   ); ?>[<?php echo esc_attr(
-											   $handle
-										   ); ?>][<?php echo esc_attr( $font->id ); ?>][<?php echo esc_attr(
-											   $variant->id
-										   ); ?>]" value="0"/>
+									<input type="hidden" name="<?php echo esc_attr( Settings::OMGF_OPTIMIZE_SETTING_PRELOAD_FONTS ); ?>[<?php echo esc_attr( $handle ); ?>][<?php echo esc_attr(
+										$font->id
+									); ?>][<?php echo esc_attr( $variant->id ); ?>]" value="0"/>
 									<input data-handle="<?php echo esc_attr( $handle ); ?>"
 										   data-font-id="<?php echo esc_attr( $handle . '-' . $font->id ); ?>"
 										   autocomplete="off" type="checkbox"
@@ -600,7 +463,7 @@ class Optimize extends Builder {
 										   ); ?>][<?php echo esc_attr( $font->id ); ?>][<?php echo esc_attr(
 											   $variant->id
 										   ); ?>]"
-										   value="<?php echo esc_attr( $variant->id ); ?>" <?php echo $preload ? 'checked="checked"' : ''; ?> <?php echo $unload ? 'disabled' : ''; ?> />
+										   value="<?php echo esc_attr( $variant->id ); ?>" <?php echo $preload ? 'checked="checked"' : ''; ?> <?php echo $unload || $disable_preload ? 'disabled' : ''; ?> />
 								</td>
 								<td class="unload-<?php echo esc_attr( $class ); ?>">
 									<input type="hidden"

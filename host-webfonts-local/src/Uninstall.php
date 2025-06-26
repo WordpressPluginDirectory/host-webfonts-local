@@ -10,15 +10,13 @@
 *
 * @package  : OMGF
 * @author   : Daan van den Bergh
-* @copyright: © 2024 Daan van den Bergh
+* @copyright: © 2025 Daan van den Bergh
 * @url      : https://daan.dev
 * * * * * * * * * * * * * * * * * * * */
 
 namespace OMGF;
 
 use OMGF\Admin\Settings;
-
-defined( 'ABSPATH' ) || exit;
 
 /**
  * @codeCoverageIgnore
@@ -47,6 +45,7 @@ class Uninstall {
 			[
 				'omgf_settings',
 				Settings::OMGF_OPTIMIZE_SETTING_OPTIMIZED_FONTS,
+				Settings::OMGF_OPTIMIZE_SETTING_OPTIMIZED_FONTS_FRONTEND,
 				Settings::OMGF_OPTIMIZE_SETTING_PRELOAD_FONTS,
 				Settings::OMGF_OPTIMIZE_SETTING_UNLOAD_FONTS,
 				Settings::OMGF_AVAILABLE_USED_SUBSETS,
@@ -56,6 +55,7 @@ class Uninstall {
 				Settings::OMGF_CURRENT_DB_VERSION,
 				Settings::OMGF_CACHE_TIMESTAMP,
 				Settings::OMGF_FOUND_IFRAMES,
+				Settings::OMGF_GOOGLE_FONTS_CHECKER_RESULTS,
 				Settings::OMGF_HIDDEN_NOTICES,
 			]
 		);
