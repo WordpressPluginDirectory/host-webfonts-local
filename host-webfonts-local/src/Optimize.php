@@ -56,6 +56,9 @@ class Optimize {
 	/** @var bool $return_early */
 	private $return_early = false;
 
+	/** @var string $stylesheet */
+	private $stylesheet = '';
+
 	/** @var string */
 	private $path = '';
 
@@ -85,7 +88,8 @@ class Optimize {
 		string $handle,
 		string $original_handle,
 		string $return = 'url',
-		bool $return_early = false
+		bool $return_early = false,
+		string $stylesheet = ''
 	) {
 		$this->url             = apply_filters( 'omgf_optimize_url', $url );
 		$this->handle          = sanitize_title_with_dashes( $handle );
@@ -93,6 +97,7 @@ class Optimize {
 		$this->path            = OMGF_UPLOAD_DIR . '/' . $this->handle;
 		$this->return          = $return;
 		$this->return_early    = $return_early;
+		$this->stylesheet      = $stylesheet;
 	}
 
 	/**
@@ -154,10 +159,15 @@ class Optimize {
 		 */
 		delete_option( Settings::OMGF_CACHE_IS_STALE );
 
-		$stylesheet_bak = $this->fetch_stylesheet( $this->url );
-		$fonts_bak      = $this->convert_to_fonts_object( $stylesheet_bak );
-		$stylesheet     = $this->remove_unloaded_variants( $stylesheet_bak );
-		$fonts          = $this->convert_to_fonts_object( $stylesheet );
+		$stylesheet_bak = $this->stylesheet;
+
+		if ( ! $stylesheet_bak ) {
+			$stylesheet_bak = $this->fetch_stylesheet( $this->url );
+		}
+
+		$fonts_bak  = $this->convert_to_fonts_object( $stylesheet_bak );
+		$stylesheet = $this->remove_unloaded_variants( $stylesheet_bak );
+		$fonts      = $this->convert_to_fonts_object( $stylesheet );
 
 		if ( empty( $fonts ) ) {
 			return ''; // @codeCoverageIgnore
@@ -213,7 +223,7 @@ class Optimize {
 					/**
 					 * If file already exists the OMGF_Download class bails early.
 					 */
-					$variant->woff2 = OMGF::download( $variant->woff2, $filename, 'woff2', $this->path );
+					$variant->woff2 = OMGF::download( $variant->woff2, $filename, $this->path );
 				}
 			}
 
@@ -323,7 +333,7 @@ class Optimize {
 	private function convert_to_fonts_object( $stylesheet ) {
 		OMGF::debug( __( 'Stylesheet fetched. Parsing for font-families...', 'host-webfonts-local' ) );
 
-		preg_match_all( '/font-family:\s\'(.*?)\';/', $stylesheet, $font_families );
+		preg_match_all( '/font-family:[\s\n]*[\'\"]?(.*?)[\'\"]?;/', $stylesheet, $font_families );
 
 		if ( empty( $font_families[ 1 ] ) ) {
 			return []; // @codeCoverageIgnore
@@ -373,10 +383,10 @@ class Optimize {
 		OMGF::debug( __( 'Parsing variants.', 'host-webfonts-local' ) );
 
 		/**
-		 * This also captures the commented Subset name.
+		 * This also captures the commented Subset name, but allows only one comment to be captured to be more restrictive.
 		 */
 		preg_match_all(
-			apply_filters( 'omgf_optimize_parse_variants_regex', '/\/\*\s.*?}/s', $this->url ),
+			apply_filters( 'omgf_optimize_parse_variants_regex', '/(?:\/\*[^*]*\*+(?:[^\/*][^*]*\*+)*\/\s*)?@font-face\s*\{[\s\S]*?\}/s', $this->url ),
 			$stylesheet,
 			$font_faces
 		);
@@ -401,14 +411,12 @@ class Optimize {
 
 			preg_match( '/font-style:\s(normal|italic);/', $font_face, $font_style );
 			preg_match( '/font-weight:\s([0-9\s]+);/', $font_face, $font_weight );
-			preg_match( '/src\s*:\s*[^;]*?url\(\s*[\'"]?([^\'")]+\.woff2)[\'"]?\s*\)/', $font_face, $font_src );
+			/**
+			 * @since v6.0.9 Removed .woff fallback, accepting any src url.
+			 */
+			preg_match( '/src\s*:\s*[^;]*?url\(\s*[\'"]?([^\'")]+)[\'"]?\s*\)/', $font_face, $font_src );
 			preg_match( '/\/\*\s([a-z\-0-9\[\]]+?)\s\*\//', $font_face, $subset );
 			preg_match( '/unicode-range:\s(.*?);/', $font_face, $range );
-
-			// If no woff2 file is found in the src attribute, check if it defines a woff file.
-			if ( empty( $font_src[ 1 ] ) ) {
-				preg_match( '/src\s*:\s*[^;]*?url\(\s*[\'"]?([^\'")]+\.woff)[\'"]?\s*\)/', $font_face, $font_src ); // @codeCoverageIgnore
-			}
 
 			$font_style  = ! empty( $font_style[ 1 ] ) ? $font_style[ 1 ] : 'normal';
 			$font_weight = ! empty( $font_weight[ 1 ] ) ? $font_weight [ 1 ] : '400';
@@ -423,14 +431,14 @@ class Optimize {
 			}
 
 			/**
-			 * If $subset is empty, assume it's a logographic (Chinese, Japanese, etc.) character set.
+			 * If $subset is numeric, assume it's a logographic (Chinese, Japanese, etc.) character set.
 			 */
 			if ( is_numeric( $subset ) ) {
 				$subset = 'logogram-' . $subset;
 			}
 
 			$font_weight_id                  = str_replace( ' ', '-', $font_weight );
-			$key                             = $subset . '-' . $font_weight_id . ( $font_style === 'normal' ? '' : '-' . $font_style );
+			$key                             = ( $subset ? $subset . '-' : '' ) . $font_weight_id . ( $font_style === 'normal' ? '' : '-' . $font_style );
 			$font_object[ $key ]             = new \stdClass();
 			$font_object[ $key ]->id         = $font_weight_id . ( $font_style === 'normal' ? '' : $font_style );
 			$font_object[ $key ]->fontFamily = $font_family;
@@ -477,7 +485,7 @@ class Optimize {
 	private function parse_subsets( $stylesheet, $font_family ) {
 		OMGF::debug( __( 'Parsing subsets.', 'host-webfonts-local' ) );
 
-		preg_match_all( '/\/\*\s([a-z\-]+?)\s\*\//', $stylesheet, $subsets );
+		preg_match_all( '/(?<=\/\*)\s*([\s\S]*?)\s*(?=\*\/\n{0,1}[ \t]*@font-face)/', $stylesheet, $subsets );
 
 		if ( empty( $subsets[ 1 ] ) ) {
 			return []; // @codeCoverageIgnore
