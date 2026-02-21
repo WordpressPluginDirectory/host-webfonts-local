@@ -149,14 +149,15 @@ class Process {
 
 		add_action( 'wp_head', [ $this, 'add_preloads' ], 3 );
 		add_action( 'template_redirect', [ $this, 'maybe_buffer_output' ], 3 );
+		add_action( 'login_init', [ $this, 'maybe_buffer_output' ], 3 );
 		/**
 		 * @since v5.3.10 parse() runs on priority 10. Run this afterward, to make sure e.g. the <preload> -> <noscript> approach some theme
 		 *                developers use keeps working.
 		 */
 		add_filter( 'omgf_buffer_output', [ $this, 'remove_resource_hints' ], 11 );
 
-		/** Only hook into our own filter if Smart Slider 3 or Groovy Menu aren't active, as they have their own output filter. */
-		if ( ! function_exists( 'smart_slider_3_plugins_loaded' ) || ! function_exists( 'groovy_menu_init_classes' ) ) {
+		/** Only hook into our own filter if Smart Slider 3 and Groovy Menu aren't active, as they have their own output filter. */
+		if ( ! function_exists( 'smart_slider_3_plugins_loaded' ) && ! function_exists( 'groovy_menu_init_classes' ) ) {
 			add_filter( 'omgf_buffer_output', [ $this, 'parse' ] );
 		}
 
