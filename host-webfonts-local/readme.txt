@@ -3,7 +3,7 @@ Contributors: DaanvandenBergh
 Tags: google, fonts, gdpr, dsgvo, cache
 Requires at least: 5.9
 Tested up to: 6.9
-Stable tag: 6.1.3
+Stable tag: 6.3.3
 Requires PHP: 7.3
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
@@ -17,7 +17,7 @@ OMGF automagically caches the Google Fonts used by your theme/plugins locally. N
 > How could using fonts via Google's service possibly run afoul of GDPR? The fact of the matter is that, when a font is requested by the user's browser, their IP is logged by Google and used for analytics.
 > — Lifehacker
 
-**Leverage Browser Cache**, **reduce DNS lookups/requests**, **reduce Cumulative Layout Shift** and make your Google Fonts **100% GDPR compliant** with OMGF!
+**Leverage Browser Cache**, **reduce DNS lookups/requests**, **reduce Cumulative Layout Shift** and make your Google Fonts **100% GDPR-compliant** with OMGF!
 
 OMGF is written with performance and user-friendliness in mind. It uses the Google Fonts API to automatically cache the fonts your theme and plugins use to **minimize DNS requests** and speed up your WordPress website.
 
@@ -27,26 +27,30 @@ After installing and configuring the plugin, OMGF will automatically start looki
 
 All Google Fonts are listed in the **Optimize Local Fonts** section of OMGF's settings screen. There, you can choose to:
 
-- *Preload* fonts to **reduce Cumulative Layout Shift** above the fold,
-- *Unload* fonts that're not used by you, your theme and/or plugins,
+- *Preload* fonts to **reduce Cumulative Layout Shift** above the fold.
+- *Unload* fonts that're not used by you, your theme, and/or plugins.
 - Set a *Fallback Font Stack* (OMGF Pro required), to further **reduce Cumulative Layout Shift**, or
+- Enable *Magic Fallbacks* (OMGF Pro required), to automatically generate mathematically tuned system font fallbacks that match your Google Fonts' exact proportions, eliminating **layout shift** while fonts load.
 - *Replace* (OMGF Pro required) font-families with system fonts to **speed up loading times**!
 
 = Other Features include =
 
-- The **integrated Google Fonts checker** notifies you if a plugin or your theme has added Google Fonts (e.g. after an update) it can't process.
+- The **integrated Google Fonts checker** notifies you if a plugin or your theme has added Google Fonts (e.g., after an update) it can't process.
+- The **Performance Checker** automatically monitors your Google Fonts' performance and notifies you about potential improvements in 4 areas:
+  - **Unused subsets** — subsets that are downloaded but never used, increasing **Total Blocking Time**,
+  - **Unused font styles/weights** — font variants that are loaded but not used, causing **unused CSS**,
+  - **Missing preloads** — fonts used above the fold that aren't preloaded, increasing **Largest Contentful Paint** and **First Contentful Paint**,
+  - **Cumulative Layout Shift** — layout shift caused by fonts loading after the page is rendered.
 - **Variable Fonts** support,
-- Automatically **Remove unused subsets** to reduce the size of the CSS stylesheet up to 90%!
 - **Remove Resource Hints** (preload, preconnect, dns-prefetch) pointing to `fonts.googleapis.com` or
   `fonts.gstatic.com`,
-- **Ensure text remains visible during webfont load** by forcing the _font-display_ attribute to your Google Fonts,
-- **Ensure text remains visible during webfont load** by forcing the _font-display_ attribute to all your other fonts! (
-  OMGF Pro required),
+	- **Ensure text remains visible during webfont load** by forcing the _font-display_ attribute to your Google Fonts,
+- **Ensure text remains visible during webfont load** by forcing the _font-display_ attribute to all your other fonts! (OMGF Pro required),
 
 = Additional Features in OMGF Pro =
 
-- Run the **Google Fonts checker** in the frontend (for all users) to **organically check for present external Google Fonts** throughout your site.
-- **Smart Preload** automatically configures which fonts should be preloaded i.e., loaded early to reduce Cumulative Layout Shift, Largest Contentful Paint and [Ensure Text Remains Visible During Webfont Load](https://daan.dev/blog/how-to/ensure-text-remains-visible-during-webfont-load/).
+- **Smart Optimize** automatically detects which fonts, subsets, and weights are actually used on each page — preloading the ones that matter and removing the ones that don't, to **eliminate render-blocking resources** and **reduce unused CSS**.
+- **Magic Fallbacks** generates mathematically tuned system font fallbacks that match your Google Fonts' exact proportions, eliminating **layout shift** while fonts load.
 - Automatically configures itself to make sure all externally hosted Google Fonts on your site are hosted locally. OMGF Pro supports:
 	- `@font-face` and `@import` statements inside **inline `<style>` blocks**,
 	- `@font-face` and `@import` statements inside **local stylesheets** loaded by e.g. your theme and/or plugins,
@@ -87,6 +91,52 @@ For the FAQ, [click here](https://daan.dev/docs/omgf-pro-faq/).
 4. Advanced Settings. Change these to make OMGF work with your configuration (if needed). The default settings will suffice for most configurations.
 
 == Changelog ==
+
+= 6.3.3 | April 10th, 2026 =
+* Improved: Performance Checker now also checks Cumulate Layout Shifting (CLS) caused by fonts.
+* Some minor UI fixes.
+
+= 6.3.2 | March 31st, 2026 =
+* Fixed: Uncaught Error: Call to undefined function is_plugin_active(), which was introduced in 6.3.1.
+
+= 6.3.1 =
+* Fixed: flushing the cache after running Save & Optimize didn't work.
+* Added: compatibility with the official Cloudflare plugin.
+
+= 6.3.0 | March 30th, 2026 =
+* Improved: clarified the dialog shown in the Performance Checker.
+* Improved: OMGF now flushes the CSS cache of the most popular caching plugins after running Save & Optimize:
+  - Autoptimize
+  - FlyingPress
+  - Kinsta Cache
+  - LiteSpeed Cache
+  - SiteGround Optimizer
+  - W3 Total Cache
+  - WP Fastest Cache
+  - WP-Optimize
+  - WP Rocket
+  - WP Super Cache
+* Improved: OMGF now flushes its own (third party) cache when editing options and/or pages/posts in the following themes/page builders:
+  - Avada
+  - Beaver Builder
+  - Bricks Builder
+  - Divi
+  - Elementor
+  - Oxygen
+* Improved: When you switch themes, update permalinks or update a plugin, OMGF will now also flush third party stylesheets it's cached.
+
+= 6.2.0 | March 23rd, 2026 =
+* Extended the Google Fonts checker with a Performance Checker, which checks how fonts are performing on your site in 3 areas:
+  - Unused Subsets,
+  - Unused Font styles/weights,
+  - Missing Preloads.
+  If it finds any issues, it'll suggest solutions.
+
+= 6.1.4 =
+* Improved: options are now retrieved much more efficiently.
+* Improved: minor security fixes.
+* Deprecated: omgf_frontend_preloaded_fonts and omgf_frontend_optimized_fonts are deprecated and will be removed in a future release.
+			  They are replaced by omgf_filter_preloaded_fonts and omgf_filter_optimized_fonts.
 
 = 6.1.3 =
 * Coincidentally found a bug that has been haunting me for years, that's why I'm releasing this quick patch release.
@@ -150,7 +200,7 @@ For the FAQ, [click here](https://daan.dev/docs/omgf-pro-faq/).
 = 6.0.2 | June 12th, 2025 =
 * Improved: the Google Fonts checker now runs through its own API endpoint, instead of WP's AJAX actions.
 * Improved: the Disable Admin Bar Menu option now also disables the Google Fonts checker.
-* Added: Real Cookie Banner, Borlabs Cookie Banner and Trustmary to the list of plugins which require additional configuration.
+* Added: Real Cookie Banner, Borlabs Cookie Banner, and Trustmary to the list of plugins which require additional configuration.
 * Minor refactors for cleaner code and to fix minor security flaws.
 
 = 6.0.1 | May 27th, 2025 =
@@ -192,14 +242,14 @@ For the FAQ, [click here](https://daan.dev/docs/omgf-pro-faq/).
 * Added: Merged both Optimization Modes option into one automatically running option:
          - A first scan is done upon Save & Optimize,
          - A quick check is done on pageload, to see if other Google Fonts are found than the ones already found, and if so, they're downloaded and replaced on-the-fly.
-* Enhanced: The Download API is replaced for an easier, leaner and faster alternative and no longer uses the WordPress API.
+* Enhanced: The Download API is replaced for an easier, leaner, and faster alternative and no longer uses the WordPress API.
          - If the first request fails, a mirror is used to retry the request, before throwing an error.
          - Fixes rest_no_route errors in some configurations.
-* Enhanced: The Task Manager now offers a quick overview of downloaded stylesheets and their status, along with simple management tasks, e.g. cache flush, configure stylesheet and/or remove.
+* Enhanced: The Task Manager now offers a quick overview of downloaded stylesheets and their status, along with simple management tasks, e.g. cache flush, configure stylesheet, and/or remove.
          - When cache is marked as stale, it's now possible to refresh the cache and maintain your stylesheet configuration.
 * Added: Resource hints enqueued in wp_resource_hints() are now properly removed.
 * Fixed: Smart Slider 3 compatibility.
-* Several bugfixes, UX improvements and code optimizations.
+* Several bugfixes, UX improvements, and code optimizations.
 
 [ Changelog shortened ... ]
 

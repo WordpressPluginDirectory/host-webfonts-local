@@ -21,385 +21,59 @@ use OMGF\Admin\Settings;
 class Helper {
 	/**
 	 * Property to hold all settings.
-	 * @var mixed
+	 * @var array
 	 */
-	private static $settings;
+	private static $settings = [];
 
 	/**
-	 * This is basically a wrapper around update_option() to offer a centralized interface for
-	 * storing OMGF's settings in the wp_options table.
-	 *
-	 * @param mixed $value
-	 * @param string $setting
-	 *
-	 * @return bool
-	 * @since v5.6.0
-	 *
+	 * @var array $preloaded_fonts
 	 */
-	public static function update_option( $setting, $value, $autoload = true ) {
-		// If $setting starts with 'omgf_' it should be saved in a separate row.
-		if ( str_starts_with( $setting, 'omgf_' ) ) {
-			return update_option( $setting, $value, $autoload );
-		}
-
-		if ( self::$settings === null ) {
-			self::$settings = self::get_settings(); // @codeCoverageIgnore
-		}
-
-		self::$settings[ $setting ] = $value;
-
-		return update_option( 'omgf_settings', self::$settings );
-	}
+	private static $preloaded_fonts = [];
 
 	/**
-	 * Gets all settings for OMGF.
-	 * @filter omgf_settings
-	 * @return array
-	 * @since  5.5.7
+	 * @var array $unloaded_fonts
 	 */
-	public static function get_settings() {
-		$defaults = apply_filters(
-			'omgf_settings_defaults',
-			[
-				Settings::OMGF_OPTIMIZE_SETTING_DISPLAY_OPTION    => 'swap',
-				Settings::OMGF_OPTIMIZE_SETTING_TEST_MODE         => '',
-				Settings::OMGF_ADV_SETTING_LEGACY_MODE            => '',
-				Settings::OMGF_ADV_SETTING_COMPATIBILITY          => '',
-				Settings::OMGF_ADV_SETTING_AUTO_SUBSETS           => 'on',
-				Settings::OMGF_ADV_SETTING_SUBSETS                => [ 'latin', 'latin-ext' ],
-				Settings::OMGF_ADV_SETTING_DISABLE_ADMIN_BAR_MENU => '',
-				Settings::OMGF_ADV_SETTING_DEBUG_MODE             => '',
-				Settings::OMGF_ADV_SETTING_UNINSTALL              => '',
-			]
-		);
-
-		if ( empty( self::$settings ) ) {
-			self::$settings = get_option( 'omgf_settings', [] ); // @codeCoverageIgnore
-		}
-
-		return apply_filters( 'omgf_settings', wp_parse_args( self::$settings, $defaults ) );
-	}
+	private static $unloaded_fonts = [];
 
 	/**
-	 * This is basically a wrapper around delete_option() to offer a centralized interface for
-	 * removing OMGF's settings in the wp_options table.
-	 *
-	 * @param string $setting
-	 *
-	 * @return bool
-	 * @since v5.6.0
-	 *
+	 * @var array $unloaded_stylesheets
 	 */
-	public static function delete_option( $setting ) {
-		if ( str_starts_with( $setting, 'omgf_' ) || apply_filters( 'omgf_delete_option', false, $setting ) ) {
-			return delete_option( $setting );
-		}
-
-		// This prevents settings from 'mysteriously' returning after being unset.
-		if ( empty( self::$settings ) ) {
-			self::$settings = self::get_settings(); // @codeCoverageIgnore
-		}
-
-		unset( self::$settings[ $setting ] );
-
-		return update_option( 'omgf_settings', self::$settings );
-	}
+	private static $unloaded_stylesheets = [];
 
 	/**
-	 * @return array
-	 *
-	 * @codeCoverageIgnore
+	 * @var array $cache_keys
 	 */
-	public static function preloaded_fonts() {
-		static $preloaded_fonts = [];
-
-		if ( empty( $preloaded_fonts ) ) {
-			$preloaded_fonts = self::get_option( Settings::OMGF_OPTIMIZE_SETTING_PRELOAD_FONTS, [] );
-		}
-
-		return $preloaded_fonts;
-	}
+	private static $cache_keys = [];
 
 	/**
-	 * Method to retrieve OMGF's settings from database.
-	 * WARNING: DO NOT ATTEMPT TO RETRIEVE WP CORE SETTINGS USING THIS METHOD. IT WILL FAIL.
-	 *
-	 * @filter omgf_setting_{$name}
-	 *
-	 * @param mixed $default (optional)
-	 * @param string $name
-	 *
-	 * @since  v5.6.0
-	 *
+	 * @var array $optimized_fonts
 	 */
-	public static function get_option( $name, $default = null ) {
-		// If $name starts with 'omgf_' it means it is saved in a separate row.
-		if ( str_starts_with( $name, 'omgf_' ) ) {
-			$value = get_option( $name, $default );
-			$name  = str_replace( 'omgf_', '', $name );
-
-			return apply_filters( "omgf_setting_$name", $value );
-		}
-
-		$value = self::get_settings()[ $name ] ?? $default;
-
-		if ( empty( $value ) && ! $default && $name === Settings::OMGF_ADV_SETTING_SUBSETS ) {
-			$default = [ 'latin', 'latin-ext' ]; // @codeCoverageIgnore
-		}
-
-		if ( empty( $value ) && $value !== '0' && $default !== null ) {
-			$value = $default;
-		}
-
-		return apply_filters( "omgf_setting_$name", $value );
-	}
+	private static $optimized_fonts = [];
 
 	/**
-	 * @return array
-	 *
-	 * @codeCoverageIgnore
+	 * @var array $admin_optimized_fonts
 	 */
-	public static function unloaded_fonts() {
-		static $unloaded_fonts = [];
-
-		if ( empty( $unloaded_fonts ) ) {
-			$unloaded_fonts = self::get_option( Settings::OMGF_OPTIMIZE_SETTING_UNLOAD_FONTS, [] );
-		}
-
-		return $unloaded_fonts;
-	}
-
-	/**
-	 * @return array
-	 *
-	 * @codeCoverageIgnore
-	 */
-	public static function unloaded_stylesheets() {
-		static $unloaded_stylesheets = [];
-
-		if ( empty( $unloaded_stylesheets ) ) {
-			// Returns a string with one empty element if the option is empty, that's why we array_filter it.
-			$unloaded_stylesheets = explode( ',', self::get_option( Settings::OMGF_OPTIMIZE_SETTING_UNLOAD_STYLESHEETS, '' ) );
-		}
-
-		// Remove empty elements (and store it to the static variable before returning it)
-		$unloaded_stylesheets = array_filter( $unloaded_stylesheets );
-
-		return $unloaded_stylesheets;
-	}
-
-	/**
-	 * @param $handle
-	 *
-	 * @return string
-	 */
-	public static function get_cache_key( $handle ) {
-		$cache_keys = self::cache_keys();
-
-		foreach ( $cache_keys as $key ) {
-			/**
-			 * @since v4.5.16 Convert $handle to lowercase, because $key is saved lowercase, too.
-			 */
-			if ( str_contains( $key, strtolower( $handle ) ) ) {
-				return $key;
-			}
-		}
-
-		return '';
-	}
-
-	/**
-	 * Fetch cache keys from the DB.
-	 * @return array
-	 *
-	 * @codeCoverageIgnore
-	 * @since v5.6.4 Extract cache keys from Optimized Fonts option if the option itself appears empty.
-	 */
-	public static function cache_keys() {
-		static $cache_keys = [];
-
-		if ( empty( $cache_keys ) ) {
-			$cache_keys = explode( ',', self::get_option( Settings::OMGF_OPTIMIZE_SETTING_CACHE_KEYS, '' ) );
-		}
-
-		// Remove empty elements.
-		$cache_keys = array_filter( $cache_keys );
-
-		/**
-		 * If the cache keys option is empty, this means that it hasn't been saved before. So, let's fetch
-		 * the (default) stylesheet handles from the optimized fonts option.
-		 */
-		if ( empty( $cache_keys ) ) {
-			$optimized_fonts = self::admin_optimized_fonts(); // @codeCoverageIgnore
-
-			$cache_keys = array_keys( $optimized_fonts ); //@codeCoverageIgnore
-		}
-
-		return $cache_keys;
-	}
-
-	/**
-	 * Optimized Local Fonts to be displayed in the Optimize Local Fonts table.
-	 * Use a static variable to reduce database reads/writes.
-	 *
-	 * @param bool $force_add
-	 * @param array $maybe_add If it doesn't exist, it's added to the cache layer.
-	 *
-	 * @return array
-	 *
-	 * @codeCoverageIgnore
-	 * @since v4.5.7
-	 *
-	 */
-	public static function admin_optimized_fonts( $maybe_add = [], $force_add = false ) {
-		static $optimized_fonts = [];
-
-		/**
-		 * Get a fresh copy from the database if $optimized_fonts is empty|null|false (on 1st run)
-		 */
-		if ( empty( $optimized_fonts ) ) {
-			$optimized_fonts = self::get_option( Settings::OMGF_OPTIMIZE_SETTING_OPTIMIZED_FONTS, [] );
-		}
-
-		/**
-		 * get_option() should take care of this, but sometimes it doesn't.
-		 * @since v4.5.6
-		 */
-		if ( is_string( $optimized_fonts ) && $optimized_fonts !== '' ) {
-			$optimized_fonts = unserialize( $optimized_fonts ); // @codeCoverageIgnore
-		}
-
-		/**
-		 * If $maybe_add doesn't exist in the cache layer yet, add it.
-		 * @since v4.5.7
-		 */
-		if ( ! empty( $maybe_add ) && ( ! isset( $optimized_fonts[ key( $maybe_add ) ] ) || $force_add ) ) {
-			$optimized_fonts = array_merge( $optimized_fonts, $maybe_add );
-		}
-
-		return $optimized_fonts ?: [];
-	}
-
-	/**
-	 * Optimized Local Fonts to be used in the frontend. Doesn\'t contain unloaded fonts.
-	 * Use a static variable to reduce database reads/writes.
-	 *
-	 * @param bool $force_add
-	 * @param array $maybe_add If it doesn't exist, it's added to the cache layer.
-	 *
-	 * @return array
-	 *
-	 * @codeCoverageIgnore
-	 * @since v5.8.1
-	 *
-	 */
-	public static function optimized_fonts( $maybe_add = [], $force_add = false ) {
-		static $optimized_fonts = [];
-
-		/**
-		 * Get a fresh copy from the database if $optimized_fonts is empty|null|false (on 1st run)
-		 */
-		if ( empty( $optimized_fonts ) ) {
-			$optimized_fonts = self::get_option( Settings::OMGF_OPTIMIZE_SETTING_OPTIMIZED_FONTS_FRONTEND, [] );
-		}
-
-		/**
-		 * Fallback to original Optimized Fonts table.
-		 */
-		if ( empty( $optimized_fonts ) ) {
-			$optimized_fonts = self::admin_optimized_fonts();
-		}
-
-		/**
-		 * get_option() should take care of this, but sometimes it doesn't.
-		 * @since v4.5.6
-		 */
-		if ( is_string( $optimized_fonts ) && $optimized_fonts !== '' ) {
-			$optimized_fonts = unserialize( $optimized_fonts ); // @codeCoverageIgnore
-		}
-
-		/**
-		 * If $maybe_add doesn't exist in the cache layer yet, add it.
-		 * @since v4.5.7
-		 */
-		if ( ! empty( $maybe_add ) && ( ! isset( $optimized_fonts[ key( $maybe_add ) ] ) || $force_add ) ) {
-			$optimized_fonts = array_merge( $optimized_fonts, $maybe_add );
-		}
-
-		return $optimized_fonts ?: [];
-	}
-
-	/**
-	 * @return array
-	 *
-	 * @codeCoverageIgnore
-	 * @since v5.4.4 Returns the available subsets in all requested fonts/stylesheets.
-	 *               Functions as a temporary cache layer to reduce DB reads with get_option().
-	 */
-	public static function available_used_subsets( $maybe_add = [], $intersect = false ) {
-		static $subsets = [];
-
-		if ( empty( $subsets ) ) {
-			$subsets = self::get_option( Settings::OMGF_AVAILABLE_USED_SUBSETS, [] );
-		}
-
-		/**
-		 * get_option() should take care of this, but sometimes it doesn't.
-		 */
-		if ( is_string( $subsets ) ) {
-			$subsets = unserialize( $subsets ); // @codeCoverageIgnore
-		}
-
-		/**
-		 * If $maybe_add doesn't exist in the cache layer yet, add it.
-		 */
-		if ( ! empty( $maybe_add ) && ( ! isset( $subsets[ key( $maybe_add ) ] ) ) ) {
-			$subsets = array_merge( $subsets, $maybe_add );
-		}
-
-		/**
-		 * Return only subsets that are available in all font families.
-		 * @see OMGF_Optimize_Run
-		 */
-		if ( $intersect ) {
-			/**
-			 * @var array $filtered_subsets Contains an array of Font Families along with the available selected subsets, e.g.
-			 *                              { 'Lato' => { 'latin', 'latin-ext' } }
-			 */
-			$filtered_subsets = apply_filters( 'omgf_available_filtered_subsets', array_values( array_filter( $subsets ) ) );
-
-			self::debug_array( __( 'Filtered Subsets', 'host-webfonts-local' ), $filtered_subsets );
-
-			if ( count( $filtered_subsets ) === 1 ) {
-				return reset( $filtered_subsets ); // @codeCoverageIgnore
-			}
-
-			if ( ! empty( $filtered_subsets ) ) {
-				return call_user_func_array( 'array_intersect', $filtered_subsets );
-			}
-
-			return $filtered_subsets;
-		}
-
-		return apply_filters( 'omgf_available_subsets', $subsets );
-	}
+	private static $admin_optimized_fonts = [];
 
 	/**
 	 * To prevent "Cannot use output buffering  in output buffering display handlers" errors, I introduced a debug
 	 * array feature, to easily display, well, arrays in the debug log (duh!)
 	 *
+	 * @since v5.3.7
+	 *
+	 * @param string       $name  A descriptive name to be shown in the debug log
+	 *
 	 * @param array|object $array The array to be displayed in the debug log
-	 * @param string $name A descriptive name to be shown in the debug log
 	 *
 	 * @return void
 	 *
 	 * @codeCoverageIgnore
-	 * @since v5.3.7
-	 *
 	 */
 	public static function debug_array( $name, $array ) {
-		if ( ! self::get_option( Settings::OMGF_ADV_SETTING_DEBUG_MODE ) ||
-		     ( self::get_option( Settings::OMGF_ADV_SETTING_DEBUG_MODE ) && file_exists( self::log_file() ) && filesize( self::log_file() ) > MB_IN_BYTES ) ) {
+		$debug_mode = self::get_option( Settings::OMGF_ADV_SETTING_DEBUG_MODE );
+
+		if ( ! $debug_mode ||
+		     ( file_exists( self::log_file() ) && filesize( self::log_file() ) > MB_IN_BYTES ) ) {
 			return;
 		}
 
@@ -428,6 +102,75 @@ class Helper {
 	}
 
 	/**
+	 * Method to retrieve OMGF's settings from database.
+	 * WARNING: DO NOT ATTEMPT TO RETRIEVE WP CORE SETTINGS USING THIS METHOD. IT WILL FAIL.
+	 *
+	 * @filter omgf_setting_{$name}
+	 *
+	 * @since  v5.6.0
+	 *
+	 * @param string $name
+	 *
+	 * @param mixed  $default (optional)
+	 */
+	public static function get_option( $name, $default = null ) {
+		// If $name starts with 'omgf_' it means it is saved in a separate row.
+		if ( str_starts_with( $name, 'omgf_' ) ) {
+			$value = get_option( $name, $default );
+			$name  = str_replace( 'omgf_', '', $name );
+
+			// get_option() should take care of this, but sometimes it doesn't.
+			if ( is_string( $value ) ) {
+				$value = maybe_unserialize( $value );
+			}
+
+			return apply_filters( "omgf_setting_$name", $value );
+		}
+
+		$value = self::get_settings()[ $name ] ?? $default;
+
+		if ( empty( $value ) && ! $default && $name === Settings::OMGF_ADV_SETTING_SUBSETS ) {
+			$default = [ 'latin', 'latin-ext' ]; // @codeCoverageIgnore
+		}
+
+		if ( empty( $value ) && $value !== '0' && $default !== null ) {
+			$value = $default;
+		}
+
+		return apply_filters( "omgf_setting_$name", $value );
+	}
+
+	/**
+	 * Gets all settings for OMGF.
+	 * @filter omgf_settings
+	 * @since  5.5.7
+	 * @return array
+	 */
+	public static function get_settings() {
+		$defaults = apply_filters(
+			'omgf_settings_defaults',
+			[
+				Settings::OMGF_OPTIMIZE_SETTING_DISPLAY_OPTION     => 'swap',
+				Settings::OMGF_OPTIMIZE_SETTING_TEST_MODE          => '',
+				Settings::OMGF_OPTIMIZE_SETTING_UNLOAD_STYLESHEETS => '',
+				Settings::OMGF_OPTIMIZE_SETTING_CACHE_KEYS         => '',
+				Settings::OMGF_ADV_SETTING_LEGACY_MODE             => '',
+				Settings::OMGF_ADV_SETTING_COMPATIBILITY           => '',
+				Settings::OMGF_ADV_SETTING_SUBSETS                 => [ 'latin', 'latin-ext' ],
+				Settings::OMGF_ADV_SETTING_DISABLE_ADMIN_BAR_MENU  => '',
+				Settings::OMGF_ADV_SETTING_DEBUG_MODE              => '',
+				Settings::OMGF_ADV_SETTING_UNINSTALL               => '',
+			]
+		);
+
+		if ( empty( self::$settings ) ) {
+			self::$settings = get_option( 'omgf_settings', [] ); // @codeCoverageIgnore
+		}
+
+		return apply_filters( 'omgf_settings', wp_parse_args( self::$settings, $defaults ) );
+	}
+
+	/**
 	 * Returns the absolute path to the log file.
 	 * @return string
 	 *
@@ -453,8 +196,10 @@ class Helper {
 	 * @codeCoverageIgnore
 	 */
 	public static function debug( $message ) {
-		if ( ! self::get_option( Settings::OMGF_ADV_SETTING_DEBUG_MODE ) ||
-		     ( self::get_option( Settings::OMGF_ADV_SETTING_DEBUG_MODE ) && file_exists( self::log_file() ) && filesize( self::log_file() ) > MB_IN_BYTES ) ) {
+		$debug_mode = self::get_option( Settings::OMGF_ADV_SETTING_DEBUG_MODE );
+
+		if ( ! $debug_mode ||
+		     ( file_exists( self::log_file() ) && filesize( self::log_file() ) > MB_IN_BYTES ) ) {
 			return;
 		}
 
@@ -463,6 +208,95 @@ class Helper {
 			3,
 			self::log_file()
 		); // @codeCoverageIgnore
+	}
+
+	/**
+	 * Delete a file or directory from the filesystem.
+	 *
+	 * @param $entry
+	 *
+	 * @return bool
+	 */
+	public static function delete( $entry ) {
+		self::debug( 'Deleting entry: ' . $entry );
+
+		if ( is_link( $entry ) ) {
+			return unlink( $entry );
+		}
+
+		if ( ! file_exists( $entry ) ) {
+			return true;
+		}
+
+		if ( is_dir( $entry ) ) {
+			$file    = new \FilesystemIterator( $entry );
+			$success = true;
+
+			// If dir is empty, valid() returns false.
+			while ( $file->valid() ) {
+				if ( ! self::delete( $file->getPathname() ) ) {
+					$success = false; // @codeCoverageIgnore
+				}
+
+				$file->next();
+			}
+
+			return rmdir( $entry ) && $success;
+		}
+
+		return unlink( $entry );
+	}
+
+	/**
+	 * This is basically a wrapper around delete_option() to offer a centralized interface for
+	 * removing OMGF's settings in the wp_options table.
+	 *
+	 * @since v5.6.0
+	 *
+	 * @param string $setting
+	 *
+	 * @return bool
+	 */
+	public static function delete_option( $setting ) {
+		if ( str_starts_with( $setting, 'omgf_' ) || apply_filters( 'omgf_delete_option', false, $setting ) ) {
+			$deleted = delete_option( $setting );
+
+			if ( $deleted ) {
+				self::reset_cache();
+			}
+
+			return $deleted;
+		}
+
+		// This prevents settings from 'mysteriously' returning after being unset.
+		if ( empty( self::$settings ) ) {
+			self::$settings = self::get_settings(); // @codeCoverageIgnore
+		}
+
+		unset( self::$settings[ $setting ] );
+
+		$deleted = update_option( 'omgf_settings', self::$settings );
+
+		if ( $deleted ) {
+			self::reset_cache();
+		}
+
+		return $deleted;
+	}
+
+	/**
+	 * Resets all static caches.
+	 *
+	 * @return void
+	 */
+	public static function reset_cache() {
+		self::$settings              = [];
+		self::$preloaded_fonts       = [];
+		self::$unloaded_fonts        = [];
+		self::$unloaded_stylesheets  = [];
+		self::$cache_keys            = [];
+		self::$admin_optimized_fonts = [];
+		self::$optimized_fonts       = [];
 	}
 
 	/**
@@ -477,7 +311,46 @@ class Helper {
 	public static function download( $url, $filename, $path ) {
 		$download = new Download( $url, $filename, $path );
 
-		return $download->download();
+		return apply_filters( 'omgf_download', $download->download() );
+	}
+
+	/**
+	 * Flush the entire OMGF cache.
+	 *
+	 * @return void
+	 * @throws \ReflectionException
+	 */
+	public static function flush_cache( $initiator = 'optimize-webfonts' ) {
+		static $flushed = false;
+
+		if ( $flushed ) {
+			return;
+		}
+
+		$flushed = true;
+
+		$cache = new Cache();
+
+		$cache->flush( $initiator );
+	}
+
+	/**
+	 * Flush only 3rd party stylesheet cache directories.
+	 *
+	 * @return void
+	 */
+	public static function flush_third_party_cache() {
+		static $flushed = false;
+
+		if ( $flushed ) {
+			return;
+		}
+
+		$flushed = true;
+
+		$cache = new Cache();
+
+		$cache->flush_third_party();
 	}
 
 	/**
@@ -492,38 +365,158 @@ class Helper {
 	}
 
 	/**
-	 * Delete file or directory from filesystem.
+	 * @param $handle
 	 *
-	 * @param $entry
+	 * @return string
 	 */
-	public static function delete( $entry ) {
-		if ( is_dir( $entry ) ) {
-			$file = new \FilesystemIterator( $entry );
+	public static function get_cache_key( $handle ) {
+		$cache_keys = self::cache_keys();
+		$cache_key  = '';
 
-			// If dir is empty, valid() returns false.
-			while ( $file->valid() ) {
-				self::delete( $file->getPathName() );
-				$file->next();
+		foreach ( $cache_keys as $key ) {
+			/**
+			 * @since v4.5.16 Convert $handle to lowercase, because $key is saved lowercase, too.
+			 */
+			if ( str_contains( $key, strtolower( $handle ) ) ) {
+				$cache_key = $key;
+
+				break;
+			}
+		}
+
+		return apply_filters( 'omgf_cache_key', $cache_key, $handle );
+	}
+
+	/**
+	 * Fetch cache keys from the DB.
+	 * @since v5.6.4 Extract cache keys from Optimized Fonts option if the option itself appears empty.
+	 *
+	 * @param bool $force_refresh
+	 *
+	 * @return array
+	 *
+	 * @codeCoverageIgnore
+	 */
+	public static function cache_keys( $force_refresh = false ) {
+		if ( empty( self::$cache_keys ) || $force_refresh ) {
+			// Returns a string with one empty element if the option is empty, that's why we array_filter it.
+			self::$cache_keys = array_filter( explode( ',', self::get_option( Settings::OMGF_OPTIMIZE_SETTING_CACHE_KEYS, '' ) ) );
+		}
+
+		/**
+		 * If the cache keys option is empty, this means that it hasn't been saved before. So, let's fetch
+		 * the (default) stylesheet handles from the optimized fonts option.
+		 */
+		if ( empty( self::$cache_keys ) ) {
+			$optimized_fonts = self::admin_optimized_fonts(); // @codeCoverageIgnore
+
+			self::$cache_keys = array_keys( $optimized_fonts ); //@codeCoverageIgnore
+		}
+
+		return apply_filters( 'omgf_cache_keys', self::$cache_keys );
+	}
+
+	/**
+	 * Optimized Local Fonts to be displayed in the Optimize Local Fonts table.
+	 *
+	 * Use a static variable to reduce database reads/writes.
+	 *
+	 * @since v4.5.7
+	 *
+	 * @param array $maybe_add If it doesn't exist, it's added to the cache layer.
+	 *
+	 * @param bool  $force_add
+	 *
+	 * @return array
+	 *
+	 * @codeCoverageIgnore
+	 */
+	public static function admin_optimized_fonts( $maybe_add = [], $force_add = false ) {
+		/**
+		 * Get a fresh copy from the database if self::$optimized_fonts is empty|null|false (on 1st run)
+		 */
+		if ( empty( self::$admin_optimized_fonts ) ) {
+			self::$admin_optimized_fonts = self::get_option( Settings::OMGF_OPTIMIZE_SETTING_OPTIMIZED_FONTS, [] );
+		}
+
+		/**
+		 * get_option() should take care of this, but sometimes it doesn't.
+		 * @since v4.5.6
+		 */
+		if ( is_string( self::$admin_optimized_fonts ) && self::$admin_optimized_fonts !== '' ) {
+			self::$admin_optimized_fonts = maybe_unserialize( self::$admin_optimized_fonts ); // @codeCoverageIgnore
+		}
+
+		/**
+		 * If $maybe_add doesn't exist in the cache layer yet, add it.
+		 * @since v4.5.7
+		 */
+		if ( ! empty( $maybe_add ) && ( ! isset( self::$admin_optimized_fonts[ key( $maybe_add ) ] ) || $force_add ) ) {
+			self::$admin_optimized_fonts = array_merge( self::$admin_optimized_fonts, $maybe_add );
+		}
+
+		return apply_filters( 'omgf_filter_admin_optimized_fonts', self::$admin_optimized_fonts ?: [] );
+	}
+
+	/**
+	 * Returns an array of settings rows, filtered by $needles, derived directly from the Settings class.
+	 *
+	 * Used in:
+	 * - @see Uninstall::remove_db_entries()
+	 * - @see Ajax::empty_cache()
+	 *
+	 * @param array $needles
+	 * @param array $ignore
+	 *
+	 * @return array
+	 * @throws \ReflectionException
+	 */
+	public static function get_db_rows_by( $needles = [], $ignore = [] ) {
+		$settings = ( new \ReflectionClass( Settings::class ) )->getConstants();
+
+		return array_filter( $settings, function ( $row, $constant ) use ( $needles, $ignore ) {
+			foreach ( $needles as $needle ) {
+				if ( str_starts_with( $constant, $needle ) && ! in_array( $row, $ignore, true ) ) {
+					return true;
+				}
 			}
 
-			rmdir( $entry );
-		} else {
-			unlink( $entry );
+			return false;
+		}, ARRAY_FILTER_USE_BOTH );
+	}
+
+	/**
+	 * @param array $params
+	 *
+	 * @return bool
+	 *
+	 * @codeCoverageIgnore
+	 */
+	public static function is_running_optimize( $params = [] ) {
+		$is_running = false;
+
+		/**
+		 * If a dev did unset($_GET) somewhere, we can't assume that it exists.
+		 */
+		if ( ! empty( $_GET ) ) {
+			$is_running = array_key_exists( 'omgf_optimize', $_GET );
 		}
+
+		return apply_filters( 'omgf_is_running_optimize', ( array_key_exists( 'omgf_optimize', $params ) || $is_running ) );
 	}
 
 	/**
 	 * Generate a request to $uri including the required parameters for OMGF to run in the frontend.
 	 *
-	 * @param $url A (relative or absolute) URL, defaults to home URL.
-	 *
-	 * @return string
 	 * @since v5.4.4 Added omgf_optimize_run_args filter so other plugins can add query parameters to the Save & Optimize routine.
 	 *
+	 * @param string $url A (relative or absolute) URL, defaults to home URL.
+	 *
+	 * @return string
 	 */
 	public static function no_cache_optimize_url( $url = '' ) {
 		if ( ! $url ) {
-			$url = get_home_url();
+			$url = get_home_url(); // @codeCoverageIgnore
 		}
 
 		if ( wp_make_link_relative( $url ) === $url ) {
@@ -542,23 +535,187 @@ class Helper {
 			]
 		);
 
-		return add_query_arg( $args, $url );
+		return apply_filters( 'omgf_filter_optimize_url', add_query_arg( $args, $url ) );
 	}
 
 	/**
-	 * @param array $post
+	 * If admin_optimized_fonts() is empty, but optimize has run, we can assume optimize has failed.
+	 *
+	 * @since v6.2.0
 	 *
 	 * @return bool
+	 */
+	public static function optimize_failed() {
+		return empty( self::admin_optimized_fonts() ) && self::get_option( Settings::OMGF_FLAG_OPTIMIZE_HAS_RUN );
+	}
+
+	/**
+	 * If admin_optimized_fonts() is not empty and optimize has run, we can assume optimize has succeeded.
+	 *
+	 * @since v6.2.0
+	 *
+	 * @return bool
+	 */
+	public static function optimize_succeeded() {
+		return ! empty( self::admin_optimized_fonts() ) && self::get_option( Settings::OMGF_FLAG_OPTIMIZE_HAS_RUN );
+	}
+
+	/**
+	 * Optimized Local Fonts to be used in the frontend. Doesn't contain unloaded fonts.
+	 * Use a static variable to reduce database reads/writes.
+	 *
+	 * @since v5.8.1
+	 *
+	 * @param array $maybe_add If it doesn't exist, it's added to the cache layer.
+	 *
+	 * @param bool  $force_add
+	 *
+	 * @return array
 	 *
 	 * @codeCoverageIgnore
 	 */
-	public static function is_running_optimize( $post = [] ) {
-		$is_running = false;
-
-		if ( isset( $_GET ) ) {
-			$is_running = array_key_exists( 'omgf_optimize', $_GET );
+	public static function optimized_fonts( $maybe_add = [], $force_add = false ) {
+		/**
+		 * Get a fresh copy from the database if self::$optimized_fonts is empty|null|false (on 1st run)
+		 */
+		if ( empty( self::$optimized_fonts ) ) {
+			self::$optimized_fonts = self::get_option( Settings::OMGF_OPTIMIZE_SETTING_OPTIMIZED_FONTS_FRONTEND, [] );
 		}
 
-		return apply_filters( 'omgf_is_running_optimize', ( array_key_exists( 'omgf_optimize', $post ) || $is_running ) );
+		/**
+		 * Fallback to the original Optimized Fonts table.
+		 */
+		if ( empty( self::$optimized_fonts ) ) {
+			self::$optimized_fonts = self::admin_optimized_fonts();
+		}
+
+		/**
+		 * get_option() should take care of this, but sometimes it doesn't.
+		 * @since v4.5.6
+		 */
+		if ( is_string( self::$optimized_fonts ) && self::$optimized_fonts !== '' ) {
+			self::$optimized_fonts = maybe_unserialize( self::$optimized_fonts ); // @codeCoverageIgnore
+		}
+
+		/**
+		 * If $maybe_add doesn't exist in the cache layer yet, add it.
+		 * @since v4.5.7
+		 */
+		if ( ! empty( $maybe_add ) && ( ! isset( self::$optimized_fonts[ key( $maybe_add ) ] ) || $force_add ) ) {
+			self::$optimized_fonts = array_merge( self::$optimized_fonts, $maybe_add );
+		}
+
+		self::$optimized_fonts = apply_filters( 'omgf_filter_optimized_fonts', self::$optimized_fonts ?: [] );
+
+		/**
+		 * Just to make sure that everything keeps working.
+		 */
+		if ( has_filter( 'omgf_frontend_optimized_fonts' ) ) {
+			_deprecated_hook( 'omgf_frontend_optimized_fonts', '6.1.4', 'omgf_filter_optimized_fonts' );
+
+			self::$optimized_fonts = apply_filters( 'omgf_frontend_optimized_fonts', self::$optimized_fonts );
+		}
+
+		return self::$optimized_fonts;
+	}
+
+	/**
+	 * @return array
+	 *
+	 * @codeCoverageIgnore
+	 */
+	public static function preloaded_fonts() {
+		if ( empty( self::$preloaded_fonts ) ) {
+			self::$preloaded_fonts = self::get_option( Settings::OMGF_OPTIMIZE_SETTING_PRELOAD_FONTS, [] );
+		}
+
+		$preloaded_fonts = apply_filters( 'omgf_filter_preloaded_fonts', self::$preloaded_fonts );
+
+		/**
+		 * Just to make sure that everything keeps working.
+		 */
+		if ( has_filter( 'omgf_frontend_preloaded_fonts' ) ) {
+			_deprecated_hook( 'omgf_frontend_preloaded_fonts', '6.1.4', 'omgf_filter_preloaded_fonts' );
+
+			$preloaded_fonts = apply_filters( 'omgf_frontend_preloaded_fonts', $preloaded_fonts );
+		}
+
+		return $preloaded_fonts;
+	}
+
+	/**
+	 * @return void
+	 * @codeCoverageIgnore
+	 */
+	public static function reset_static_properties() {
+		self::$cache_keys            = [];
+		self::$admin_optimized_fonts = [];
+		self::$optimized_fonts       = [];
+	}
+
+	/**
+	 * @return array
+	 *
+	 * @codeCoverageIgnore
+	 */
+	public static function unloaded_fonts() {
+		if ( empty( self::$unloaded_fonts ) ) {
+			self::$unloaded_fonts = self::get_option( Settings::OMGF_OPTIMIZE_SETTING_UNLOAD_FONTS, [] );
+		}
+
+		return apply_filters( 'omgf_filter_unloaded_fonts', self::$unloaded_fonts );
+	}
+
+	/**
+	 * @return array
+	 *
+	 * @codeCoverageIgnore
+	 */
+	public static function unloaded_stylesheets() {
+		if ( empty( self::$unloaded_stylesheets ) ) {
+			// Returns a string with one empty element if the option is empty, that's why we array_filter it.
+			self::$unloaded_stylesheets = array_filter( explode( ',', self::get_option( Settings::OMGF_OPTIMIZE_SETTING_UNLOAD_STYLESHEETS, '' ) ) );
+		}
+
+		return apply_filters( 'omgf_filter_unloaded_stylesheets', self::$unloaded_stylesheets );
+	}
+
+	/**
+	 * This is basically a wrapper around update_option() to offer a centralized interface for
+	 * storing OMGF's settings in the wp_options table.
+	 *
+	 * @since v5.6.0
+	 *
+	 * @param string $setting
+	 *
+	 * @param mixed  $value
+	 *
+	 * @return bool
+	 */
+	public static function update_option( $setting, $value, $autoload = true ) {
+		// If $setting starts with 'omgf_' it should be saved in a separate row.
+		if ( str_starts_with( $setting, 'omgf_' ) ) {
+			$updated = update_option( $setting, $value, $autoload );
+
+			if ( $updated ) {
+				self::reset_cache();
+			}
+
+			return $updated;
+		}
+
+		if ( empty( self::$settings ) ) {
+			self::$settings = self::get_settings(); // @codeCoverageIgnore
+		}
+
+		self::$settings[ $setting ] = $value;
+
+		$updated = update_option( 'omgf_settings', self::$settings );
+
+		if ( $updated ) {
+			self::reset_cache();
+		}
+
+		return $updated;
 	}
 }

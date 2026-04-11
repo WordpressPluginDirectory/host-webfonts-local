@@ -10,7 +10,7 @@
 *
 * @package  : OMGF
 * @author   : Daan van den Bergh
-* @copyright: © 2025 Daan van den Bergh
+* @copyright: © 2026 Daan van den Bergh
 * @url      : https://daan.dev
 * * * * * * * * * * * * * * * * * * * */
 
@@ -18,7 +18,6 @@ namespace OMGF\Optimize;
 
 use OMGF\Helper as OMGF;
 use OMGF\Admin\Notice;
-use OMGF\Admin\Settings;
 use WP_Error;
 
 class Run {
@@ -37,13 +36,13 @@ class Run {
 	 * @return void
 	 */
 	private function run() {
-		OMGF::update_option( Settings::OMGF_OPTIMIZE_HAS_RUN, true );
-
 		$front_html = $this->get_front_html( get_home_url() );
 
 		if ( is_wp_error( $front_html ) || wp_remote_retrieve_response_code( $front_html ) != 200 ) {
 			$this->frontend_fetch_failed( $front_html ); // @codeCoverageIgnore
 		} else {
+			do_action( 'omgf_optimize_succeeded' );
+
 			$this->optimization_succeeded();
 		}
 	}
@@ -56,25 +55,21 @@ class Run {
 	 * @return array|WP_Error
 	 */
 	private function get_front_html( $url ) {
-		$result = wp_remote_get(
+		return wp_remote_get(
 			OMGF::no_cache_optimize_url( $url ),
 			[
 				'timeout' => 60,
 			]
 		);
-
-		return $result;
 	}
 
 	/**
 	 * @param $response WP_Error|array
-	 *
-	 * @codeCoverageIgnore
 	 */
 	private function frontend_fetch_failed( $response ) {
 		if ( $response instanceof \WP_REST_Response && $response->is_error() ) {
 			// Convert to WP_Error if WP_REST_Response
-			$response = $response->as_error();
+			$response = $response->as_error(); // @codeCoverageIgnore
 		}
 
 		add_settings_error(
@@ -83,10 +78,10 @@ class Run {
 			sprintf(
 				__( '%s encountered an error while fetching this site\'s frontend HTML', 'host-webfonts-local' ),
 				apply_filters( 'omgf_settings_page_title', 'OMGF' )
-			) . ': ' . $this->get_error_code( $response ) . ' - ' . $this->get_error_message( $response ),
-			'error'
+			) . ': ' . $this->get_error_code( $response ) . ' - ' . $this->get_error_message( $response )
 		);
 
+		// @codeCoverageIgnoreStart
 		if ( $this->get_error_code( $response ) == '403' ) {
 			Notice::set_notice(
 				sprintf(
@@ -100,6 +95,7 @@ class Run {
 				'info'
 			);
 		}
+		// @codeCoverageIgnoreEnd
 	}
 
 	/**
@@ -146,146 +142,11 @@ class Run {
 			$wp_settings_errors = [];
 		}
 
-		/**
-		 * @since v5.4.4 Check if selected Used Subset(s) are actually available in all detected font families,
-		 *               and update the Used Subset(s) option if not.
-		 */
-		$available_used_subsets = OMGF::available_used_subsets( null, true );
-		$used_subsets           = OMGF::get_option( Settings::OMGF_ADV_SETTING_SUBSETS );
-
-		/**
-		 * If $diff is empty, this means that the detected fonts are available in all selected subsets in the
-		 * Used Subset(s) option and no further action is required.
-		 */
-		$diff  = array_diff( $used_subsets, $available_used_subsets );
-		$break = false;
-
-		if ( empty( $diff ) ) {
-			$break = true; // @codeCoverageIgnore
-		}
-
-		if ( ! $break && ! empty( OMGF::get_option( Settings::OMGF_ADV_SETTING_AUTO_SUBSETS ) ) ) {
-			if ( $available_used_subsets ) {
-				OMGF::debug_array( 'Remaining Subsets (compared to Available Used Subsets)', $diff );
-
-				Notice::set_notice(
-					sprintf(
-						_n(
-							'%s is removed as a Used Subset, as not all detected font families are available in this subset. <a href="#" id="omgf-optimize-again">Run optimization again</a> to process these changes.',
-							'%s are removed as Used Subset(s), as not all detected font families are available in these subsets. <a href="#" id="omgf-optimize-again">Run optimization again</a> to process these changes.',
-							count( $diff ),
-							'host-webfonts-local'
-						),
-						$this->fluent_implode( $diff )
-					),
-					'omgf-used-subsets-removed',
-					'info'
-				);
-
-				OMGF::update_option( Settings::OMGF_ADV_SETTING_SUBSETS, $available_used_subsets );
-
-				return;
-			}
-
-			/**
-			 * If detected fonts aren't available in any of the subsets that were selected, just set Used Subsets to Latin
-			 * to make sure nothing breaks.
-			 */
-			$diff = array_diff( $used_subsets, [ 'latin' ] );
-
-			if ( ! empty ( $diff ) ) {
-				OMGF::debug_array( 'Remaining Subsets (compared to Latin)', $diff );
-
-				Notice::set_notice(
-					sprintf(
-						_n(
-							'Used Subset(s) is set to Latin, since %s isn\'t available in any of the detected font-families. <a href="#" id="omgf-optimize-again">Run optimization again</a> to process these changes.',
-							'Used Subset(s) is set to Latin, since %s aren\'t available in any of the detected font-families. <a href="#" id="omgf-optimize-again">Run optimization again</a> to process these changes.',
-							count( $diff ),
-							'host-webfonts-local'
-						),
-						$this->fluent_implode( $diff )
-					),
-					'omgf-used-subsets-defaults',
-					'info'
-				);
-
-				OMGF::update_option( Settings::OMGF_ADV_SETTING_SUBSETS, [ 'latin' ] );
-
-				return;
-			}
-		}
-
 		add_settings_error(
 			'general',
 			'omgf_optimization_success',
 			__( 'Optimization completed successfully.', 'host-webfonts-local' ) . '</a>',
 			'success'
 		);
-
-		Notice::set_notice(
-			sprintf(
-				__(
-					'Make sure you flush any caches of 3rd party plugins you\'re using (e.g. Revolution Slider, WP Rocket, Autoptimize, W3 Total Cache, etc.) to allow %s\'s optimizations to take effect. ',
-					'host-webfonts-local'
-				),
-				apply_filters( 'omgf_settings_page_title', 'OMGF' )
-			),
-			'omgf-cache-notice',
-			'warning'
-		);
-	}
-
-	/**
-	 * Generate a fluent sentence from $array, e.g. "1, 2, 3 and 4" if the count is > 1.
-	 *
-	 * @since v5.4.4
-	 *
-	 * @param array $array
-	 *
-	 * @return string
-	 *
-	 * @codeCoverageIgnore
-	 */
-	private function fluent_implode( $array ) {
-		if ( count( $array ) == 1 ) {
-			$string = reset( $array );
-
-			return $this->find_first_string( $string );
-		}
-
-		$last  = array_pop( $array );
-		$first = implode( ', ', array_map( 'ucfirst', $array ) );
-
-		return $first . ' and ' . ucfirst( $last );
-	}
-
-	/**
-	 * Keep resetting $value until it's not an array anymore.
-	 *
-	 * @since v6.0.6 This function was introduced to fix a bug where sometimes the string value would be 2 levels deep. I added recursion, just in case.
-	 *
-	 * @param $value
-	 *
-	 * @return string
-	 *
-	 * @codeCoverageIgnore
-	 */
-	private function find_first_string( $value ) {
-		if ( is_array( $value ) ) {
-			if ( empty( $value ) ) {
-				return ''; // Return an empty string if the array is empty.
-			}
-
-			$value = reset( $value );
-
-			return $this->find_first_string( $value );
-		}
-
-		if ( is_string( $value ) ) {
-			return ucfirst( $value );
-		}
-
-		return $value;
 	}
 }

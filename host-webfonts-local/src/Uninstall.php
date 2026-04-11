@@ -10,13 +10,15 @@
 *
 * @package  : OMGF
 * @author   : Daan van den Bergh
-* @copyright: © 2025 Daan van den Bergh
+* @copyright: © 2026 Daan van den Bergh
 * @url      : https://daan.dev
 * * * * * * * * * * * * * * * * * * * */
 
 namespace OMGF;
 
 use OMGF\Admin\Settings;
+use OMGF\Compatibility\Cloudflare;
+use OMGF\Helper as OMGF;
 
 /**
  * @codeCoverageIgnore
@@ -27,6 +29,7 @@ class Uninstall {
 
 	/**
 	 *
+	 * @throws \ReflectionException
 	 */
 	public function __construct() {
 		$this->cache_dir = OMGF_UPLOAD_DIR;
@@ -34,31 +37,16 @@ class Uninstall {
 		$this->remove_db_entries();
 		$this->delete_files();
 		$this->delete_dir();
+		$this->uninstall_mu_plugin();
 	}
 
 	/**
 	 * Remove all settings stored in the wp_options table.
+	 * @throws \ReflectionException
 	 */
 	private function remove_db_entries() {
-		$db_entries = apply_filters(
-			'omgf_uninstall_db_entries',
-			[
-				'omgf_settings',
-				Settings::OMGF_OPTIMIZE_SETTING_OPTIMIZED_FONTS,
-				Settings::OMGF_OPTIMIZE_SETTING_OPTIMIZED_FONTS_FRONTEND,
-				Settings::OMGF_OPTIMIZE_SETTING_PRELOAD_FONTS,
-				Settings::OMGF_OPTIMIZE_SETTING_UNLOAD_FONTS,
-				Settings::OMGF_AVAILABLE_USED_SUBSETS,
-				Settings::OMGF_NEWS_REEL,
-				Settings::OMGF_OPTIMIZE_HAS_RUN,
-				Settings::OMGF_CACHE_IS_STALE,
-				Settings::OMGF_CURRENT_DB_VERSION,
-				Settings::OMGF_CACHE_TIMESTAMP,
-				Settings::OMGF_FOUND_IFRAMES,
-				Settings::OMGF_GOOGLE_FONTS_CHECKER_RESULTS,
-				Settings::OMGF_HIDDEN_NOTICES,
-			]
-		);
+		$db_rows    = OMGF::get_db_rows_by( [ 'OMGF_FLAG_', 'OMGF_DB_', 'OMGF_OPTIMIZE_SETTING_', 'OMGF_CURRENT_DB_VERSION', 'OMGF_HIDDEN_NOTICES', 'OMGF_NEWS_REEL' ] );
+		$db_entries = apply_filters( 'omgf_uninstall_db_entries', array_merge( $db_rows, [ 'omgf_settings' ] ) );
 
 		foreach ( $db_entries as $entry ) {
 			delete_option( $entry );
@@ -68,7 +56,7 @@ class Uninstall {
 	/**
 	 * Delete all files stored in the cache directory.
 	 *
-	 * @return array
+	 * @return void
 	 */
 	private function delete_files() {
 		array_map( 'unlink', glob( $this->cache_dir . '/*.*' ) );
@@ -77,9 +65,20 @@ class Uninstall {
 	/**
 	 * Delete the cache directory.
 	 *
-	 * @return bool
+	 * @return void
 	 */
 	private function delete_dir() {
-		rmdir( $this->cache_dir );
+		if ( is_dir( $this->cache_dir ) ) {
+			rmdir( $this->cache_dir );
+		}
+	}
+
+	/**
+	 * Remove the Cloudflare MU plugin if it exists.
+	 *
+	 * @return void
+	 */
+	private function uninstall_mu_plugin() {
+		Cloudflare::uninstall_mu_plugin();
 	}
 }

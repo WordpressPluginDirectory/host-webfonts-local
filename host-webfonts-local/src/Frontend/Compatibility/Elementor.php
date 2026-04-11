@@ -10,7 +10,7 @@
 *
 * @package  : OMGF
 * @author   : Daan van den Bergh
-* @copyright: © 2025 Daan van den Bergh
+* @copyright: © 2026 Daan van den Bergh
 * @url      : https://daan.dev
 * * * * * * * * * * * * * * * * * * * */
 
@@ -53,7 +53,7 @@ class Elementor {
 	 */
 	public function maybe_modify_id( $id, $href ) {
 		if ( OMGF::get_option( Settings::OMGF_ADV_SETTING_COMPATIBILITY ) && $id === 'google-fonts-1' ) {
-			$href_attr = is_array( $href ) && isset( $href[ 'href' ] ) ? $href[ 'href' ] : '';
+			$href_attr = is_array( $href ) && isset( $href['href'] ) ? $href['href'] : '';
 
 			return str_replace( '-1', '-' . strlen( $href_attr ), $id ); // @codeCoverageIgnore
 		}
@@ -65,7 +65,7 @@ class Elementor {
 	 * Adds a piece of validation to make sure Elementor's stylesheets are included.
 	 *
 	 * @filter omgf_frontend_process_parse_links
-	 * @see    \OMGF\Frontend\Process::parse()
+	 * @see    \OMGF\Frontend\Process::process()
 	 *
 	 * @param $is_valid
 	 * @param $link

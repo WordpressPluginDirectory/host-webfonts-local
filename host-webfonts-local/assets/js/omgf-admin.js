@@ -31,7 +31,7 @@ jQuery(document).ready(function ($) {
 		init: function () {
 			// Settings
 			$('.omgf-subsets').on('change', this.maybe_select_latin);
-			$('.omgf-optimize-fonts-manage .unload').on('change', this.unload_stylesheets);
+			$('.omgf-optimize-fonts-manage .unload').on('change', this.maybe_unload_stylesheets);
 			$('.omgf-optimize-fonts-manage .unload, .omgf-optimize-fonts-manage .fallback-font-stack select').on('change', this.generate_cache_key);
 			$('.omgf-optimize-fonts-manage .unload').on('change', this.toggle_preload);
 			$('.omgf-optimize-fonts-manage .preload').on('change', this.toggle_unload);
@@ -52,7 +52,7 @@ jQuery(document).ready(function ($) {
 			$('#omgf-delete-log').on('click', this.delete_log);
 			$('.omgf-optimize-preload-warning-close').on('click', this.hide_preload_warning);
 			$('.omgf-optimize-forbidden').on('click', this.wait_for_page_reload);
-
+			$(document).on('click', '#omgf-dismiss-performance-checker-notice', this.dismiss_performance_checker_notice);
 			// Ticker
 			setInterval(this.loop_ticker_items, 4000);
 		},
@@ -179,29 +179,41 @@ jQuery(document).ready(function ($) {
 		/**
 		 * Populates the omgf_unload_stylesheets hidden field.
 		 */
-		unload_stylesheets: function () {
+		maybe_unload_stylesheets: function () {
 			var handle = $(this).closest('tbody');
 			var id = handle[0].id;
 			var checked = $('tbody' + '#' + id + ' input.unload:checked').length;
 			var total = $('tbody' + '#' + id + ' input.unload').length;
-			var unloaded_stylesheets_option = $('#unload_stylesheets');
-			var unloaded_stylesheets = unloaded_stylesheets_option.val().split(',');
 
 			if (checked === total) {
-				if (unloaded_stylesheets.indexOf(id) === -1) {
-					unloaded_stylesheets.push(id);
-				}
-
-				unloaded_stylesheets.join();
-
-				unloaded_stylesheets_option.val(unloaded_stylesheets);
+				omgf_admin.unload_stylesheet(id);
 			} else {
-				position = unloaded_stylesheets.indexOf(id);
-
-				if (~position) unloaded_stylesheets.splice(position, 1);
-
-				unloaded_stylesheets_option.val(unloaded_stylesheets);
+				omgf_admin.load_stylesheet(id);
 			}
+		},
+
+		unload_stylesheet: function (id) {
+			let unloaded_stylesheets_option = $('#unload_stylesheets'),
+				unloaded_stylesheets = unloaded_stylesheets_option.val().split(',');
+
+			if (unloaded_stylesheets.indexOf(id) === -1) {
+				unloaded_stylesheets.push(id);
+			}
+
+			unloaded_stylesheets.join();
+
+			unloaded_stylesheets_option.val(unloaded_stylesheets);
+		},
+
+		load_stylesheet: function (id) {
+			let unloaded_stylesheets_option = $('#unload_stylesheets'),
+				unloaded_stylesheets = unloaded_stylesheets_option.val().split(',');
+
+			position = unloaded_stylesheets.indexOf(id);
+
+			if (~position) unloaded_stylesheets.splice(position, 1);
+
+			unloaded_stylesheets_option.val(unloaded_stylesheets);
 		},
 
 		/**
@@ -442,6 +454,31 @@ jQuery(document).ready(function ($) {
 		},
 
 		/**
+		 * Dismiss the performance checker notice for 30 days.
+		 */
+		dismiss_performance_checker_notice: function (e) {
+			e.preventDefault();
+
+			$.ajax({
+				type: 'POST',
+				url: omgf_admin_i18n.rest_url + '/dashboard/dismiss-notice',
+				beforeSend: function (xhr) {
+					xhr.setRequestHeader('X-WP-Nonce', omgf_admin_i18n.nonce);
+					omgf_admin.show_loader();
+				},
+				complete: function (result) {
+					if (result.responseJSON !== undefined && result.responseJSON.success) {
+						$('#omgf-performance-checker-notice').fadeOut(300, function () {
+							$(this).remove();
+						});
+					}
+
+					omgf_admin.hide_loader();
+				}
+			});
+		},
+
+		/**
 		 *
 		 */
 		show_loader: function () {
@@ -453,6 +490,8 @@ jQuery(document).ready(function ($) {
 	omgf_hide_loader = omgf_admin.hide_loader;
 	omgf_unload_all = omgf_admin.unload_all;
 	omgf_load_all = omgf_admin.load_all;
+	omgf_unload_stylesheet = omgf_admin.unload_stylesheet;
+	omgf_load_stylesheet = omgf_admin.load_stylesheet;
 
 	omgf_admin.init();
 });

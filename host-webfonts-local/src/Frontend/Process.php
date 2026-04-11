@@ -10,7 +10,7 @@
 *
 * @package  : OMGF
 * @author   : Daan van den Bergh
-* @copyright: © 2025 Daan van den Bergh
+* @copyright: © 2026 Daan van den Bergh
 * @url      : https://daan.dev
 * * * * * * * * * * * * * * * * * * * */
 
@@ -33,14 +33,14 @@ class Process {
 		],
 	];
 
-	const RESOURCE_HINTS_URLS  = [
+	const RESOURCE_HINTS_URLS = [
 		'fonts.googleapis.com',
 		'fonts.gstatic.com',
 		'fonts.bunny.net',
 		'fonts-api.wp.com',
 	];
 
-	const RESOURCE_HINTS_ATTR  = [ 'dns-prefetch', 'preconnect', 'preload' ];
+	const RESOURCE_HINTS_ATTR = [ 'dns-prefetch', 'preconnect', 'preload' ];
 
 	/**
 	 * Post types that still trigger template_redirect.
@@ -82,8 +82,8 @@ class Process {
 	 * Break out early, e.g. if we want to parse other resources and don't need to
 	 * set up all the hooks and filters.
 	 *
-	 * @since v5.4.0
 	 * @var bool $break
+	 * @since v5.4.0
 	 */
 	private $break = false;
 
@@ -99,7 +99,7 @@ class Process {
 	 */
 	public function __construct( $break = false ) {
 		$this->break     = $break;
-		$this->timestamp = OMGF::get_option( Settings::OMGF_CACHE_TIMESTAMP, '' );
+		$this->timestamp = OMGF::get_option( Settings::OMGF_DB_CACHE_TIMESTAMP, '' );
 
 		if ( ! $this->timestamp ) {
 			$this->timestamp = $this->generate_timestamp(); // @codeCoverageIgnore
@@ -111,9 +111,9 @@ class Process {
 	/**
 	 * Generates a timestamp and stores it to the DB, which is appended to the stylesheet and fonts URLs.
 	 *
-	 * @see StylesheetGenerator::build_source_string()
 	 * @see self::build_search_replace()
 	 *
+	 * @see StylesheetGenerator::build_source_string()
 	 * @return int
 	 *
 	 * @codeCoverageIgnore
@@ -121,7 +121,7 @@ class Process {
 	private function generate_timestamp() {
 		$timestamp = time();
 
-		OMGF::update_option( Settings::OMGF_CACHE_TIMESTAMP, $timestamp ); // @codeCoverageIgnore
+		OMGF::update_option( Settings::OMGF_DB_CACHE_TIMESTAMP, $timestamp ); // @codeCoverageIgnore
 
 		return $timestamp;
 	}
@@ -142,23 +142,24 @@ class Process {
 		$test_mode_enabled = ! empty( OMGF::get_option( Settings::OMGF_OPTIMIZE_SETTING_TEST_MODE ) );
 
 		if ( $this->break ||
-			isset( $_GET[ 'nomgf' ] ) ||
-			( ( $test_mode_enabled && ! current_user_can( 'manage_options' ) && ! isset( $_GET[ 'omgf_optimize' ] ) ) && ( ! current_user_can( 'manage_options' ) && ! isset( $_GET[ 'omgf' ] ) ) ) ) {
+		     isset( $_GET['nomgf'] ) ||
+		     ( ( $test_mode_enabled && ! current_user_can( 'manage_options' ) && ! isset( $_GET['omgf_optimize'] ) ) && ( ! current_user_can( 'manage_options' ) && ! isset( $_GET['omgf'] ) ) ) ) {
 			return;
 		}
 
 		add_action( 'wp_head', [ $this, 'add_preloads' ], 3 );
 		add_action( 'template_redirect', [ $this, 'maybe_buffer_output' ], 3 );
+		add_action( 'template_redirect', [ $this, 'maybe_set_optimize_has_run' ] );
 		add_action( 'login_init', [ $this, 'maybe_buffer_output' ], 3 );
 		/**
-		 * @since v5.3.10 parse() runs on priority 10. Run this afterward, to make sure e.g. the <preload> -> <noscript> approach some theme
-		 *                developers use keeps working.
+		 * @since v5.3.10 parse() runs on priority 10. Run this afterward, to make sure e.g., the <preload> -> <noscript> approaches some theme
+		 *                developers use keep working.
 		 */
 		add_filter( 'omgf_buffer_output', [ $this, 'remove_resource_hints' ], 11 );
 
 		/** Only hook into our own filter if Smart Slider 3 and Groovy Menu aren't active, as they have their own output filter. */
 		if ( ! function_exists( 'smart_slider_3_plugins_loaded' ) && ! function_exists( 'groovy_menu_init_classes' ) ) {
-			add_filter( 'omgf_buffer_output', [ $this, 'parse' ] );
+			add_filter( 'omgf_buffer_output', [ $this, 'process' ] );
 		}
 
 		add_filter( 'omgf_buffer_output', [ $this, 'add_success_message' ] );
@@ -170,13 +171,13 @@ class Process {
 	 * properly. When configured handle by handle, it works fine. PHP multi-threading issues?
 	 */
 	public function add_preloads() {
-		$preloaded_fonts = apply_filters( 'omgf_frontend_preloaded_fonts', OMGF::preloaded_fonts() );
+		$preloaded_fonts = OMGF::preloaded_fonts();
 
 		if ( ! $preloaded_fonts ) {
 			return; // @codeCoverageIgnore
 		}
 
-		$optimized_fonts = apply_filters( 'omgf_frontend_optimized_fonts', OMGF::optimized_fonts() );
+		$optimized_fonts = OMGF::optimized_fonts();
 		$i               = 0;
 
 		foreach ( $optimized_fonts as $stylesheet_handle => $font_faces ) {
@@ -209,8 +210,8 @@ class Process {
 					 */
 					$url_parts = parse_url( $url );
 
-					if ( ! empty( $url_parts[ 'host' ] ) && ! empty( $url_parts[ 'path' ] ) ) {
-						$url = '//' . $url_parts[ 'host' ] . $url_parts[ 'path' ]; // @codeCoverageIgnore
+					if ( ! empty( $url_parts['host'] ) && ! empty( $url_parts['path'] ) ) {
+						$url = '//' . $url_parts['host'] . $url_parts['path']; // @codeCoverageIgnore
 					} else {
 						$url = str_replace( [ 'http:', 'https:' ], '', $url );
 					}
@@ -229,7 +230,7 @@ class Process {
 					}
 
 					$preloaded[] = $url;
-					$timestamp   = OMGF::get_option( Settings::OMGF_CACHE_TIMESTAMP );
+					$timestamp   = OMGF::get_option( Settings::OMGF_DB_CACHE_TIMESTAMP );
 					$url         .= str_contains( $url, '?' ) ? "&ver=$timestamp" : "?ver=$timestamp";
 
 					/**
@@ -244,6 +245,33 @@ class Process {
 				}
 			}
 		}
+	}
+
+	/**
+	 * Adds a little success message to the HTML to create a more logic user flow when manually optimizing pages.
+	 *
+	 * @param string $html Valid HTML
+	 *
+	 * @return string
+	 */
+	public function add_success_message( $html ) {
+		if ( ! current_user_can( 'manage_options' ) || ! isset( $_GET['omgf_optimize'] ) || wp_doing_ajax() ) {
+			return $html;
+		}
+
+		$parts = preg_split( '/(<body.*?>)/', $html, - 1, PREG_SPLIT_NO_EMPTY | PREG_SPLIT_DELIM_CAPTURE );
+
+		if ( empty( $parts[0] ) || empty( $parts[1] ) || empty( $parts[2] ) ) {
+			return $html;
+		}
+
+		$message_div = '<div class="omgf-optimize-success-message" style="padding: 25px 15px 15px; background-color: #fff; border-left: 3px solid #00a32a; border-top: 1px solid #c3c4c7; border-bottom: 1px solid #c3c4c7; border-right: 1px solid #c3c4c7; margin: 5px 20px 15px; font-family: Arial, \'Helvetica Neue\', sans-serif; font-weight: bold; font-size: 13px; color: #3c434a;"><span>%s</span></div>';
+		$message     = sprintf(
+			__( 'Google Fonts optimization completed. Return to the <a href="%s">settings screen</a> to see the results.', 'host-webfonts-local' ),
+			admin_url( 'options-general.php?page=' . Settings::OMGF_ADMIN_PAGE )
+		);
+
+		return $parts[0] . $parts[1] . sprintf( $message_div, $message ) . $parts[2];
 	}
 
 	/**
@@ -299,7 +327,7 @@ class Process {
 		 * Post edit actions
 		 */
 		if ( self::query_param_exists( 'action' ) ) {
-			if ( in_array( $_GET[ 'action' ], self::$edit_actions, true ) ) {
+			if ( in_array( $_GET['action'], self::$edit_actions, true ) ) {
 				return false;
 			}
 		}
@@ -309,7 +337,7 @@ class Process {
 		 *
 		 * @see https://www.modpagespeed.com/doc/experiment#ModPagespeed
 		 */
-		if ( self::query_param_exists( 'PageSpeed' ) && 'off' === $_GET[ 'PageSpeed' ] ) {
+		if ( self::query_param_exists( 'PageSpeed' ) && 'off' === $_GET['PageSpeed'] ) {
 			return false;
 		}
 
@@ -337,92 +365,25 @@ class Process {
 	}
 
 	/**
-	 * Returns the buffer for filtering, so page cache doesn't break.
+	 * Sets the Optimize Has Run flag after the first run, i.e.,
+	 * - when the omgf_optimize parameter,
+	 * - the flag isn't set yet, and,
+	 * - @see OMGF::admin_optimized_fonts() returns empty.
 	 *
-	 * @since v5.0.0 Tested with:
-	 *               - Asset Cleanup Pro
-	 *                 - Works
-	 *               - Cache Enabler v1.8.7
-	 *                 - Default Settings
-	 *               - Kinsta Cache (Same as Cache Enabler?)
-	 *                 - Works on Daan.dev
-	 *               - LiteSpeed Cache
-	 *                 - Don't know (Gal Baras tested it: https://wordpress.org/support/topic/completely-broke-wp-rocket-plugin/#post-15377538)
-	 *               - W3 Total Cache v2.2.1:
-	 *                 - Page Cache: Disk (basic)
-	 *                 - Database/Object Cache: Off
-	 *                 - JS/CSS minify/combine: On
-	 *               - WP Fastest Cache v0.9.5
-	 *                 - JS/CSS minify/combine: On
-	 *                 - Page Cache: On
-	 *               - WP Rocket v3.8.8:
-	 *                 - Page Cache: Enabled
-	 *                 - JS/CSS minify/combine: Enabled
-	 *               - WP Super Cache v1.7.4
-	 *                 - Page Cache: Enabled
-	 * Not tested (yet):
-	 * TODO: [OMGF-41] - Swift Performance
-	 * @return string Valid HTML
+	 * @since v6.2.0
 	 *
-	 * @codeCoverageIgnore
+	 * @return void
 	 */
-	public function return_buffer( $html ) {
-		if ( ! $html ) {
-			return $html;
+	public function maybe_set_optimize_has_run() {
+		if ( self::query_param_exists( 'omgf_optimize' ) && ! OMGF::optimize_succeeded() ) {
+			update_option( Settings::OMGF_FLAG_OPTIMIZE_HAS_RUN, true );
 		}
-
-		return apply_filters( 'omgf_buffer_output', $html );
 	}
 
 	/**
-	 * We're downloading the fonts, so preconnecting to Google is a waste of time. Literally.
-	 *
-	 * @since v5.0.5 Use a regular expression to match all resource hints.
-	 *
-	 * @param string $html Valid HTML.
-	 *
-	 * @return string Valid HTML.
-	 */
-	public function remove_resource_hints( $html ) {
-		/**
-		 * @since v5.1.5 Use a lookaround that matches all link elements, because otherwise
-		 *               matches grow past their supposed boundaries.
-		 */
-		preg_match_all( '/(?=<link).+?(?<=>)/s', $html, $resource_hints );
-
-		if ( empty( $resource_hints[ 0 ] ) ) {
-			return $html; // @codeCoverageIgnore
-		}
-
-		/**
-		 * @since v5.1.5 Filter out any resource hints with a href pointing to Google Fonts' APIs.
-		 * @since v5.2.1 Use preg_match() to exactly match an element's attribute, since 3rd party
-		 *               plugins (e.g. Asset Cleanup) also tend to include their own custom attributes,
-		 *               e.g. data-wpacu-to-be-preloaded, which would also match in strpos('preload', $match).
-		 */
-		$search = array_filter(
-			$resource_hints[ 0 ],
-			function ( $resource_hint ) {
-				preg_match( '/href=[\'"](https?:)?\/\/(.*?)[\'"\/]/', $resource_hint, $url );
-				preg_match( '/rel=[\'"](.*?)[ \'"]/', $resource_hint, $attr );
-
-				if ( empty( $url[ 2 ] ) || empty( $attr[ 1 ] ) ) {
-					return false; // @codeCoverageIgnore
-				}
-
-				$url  = $url[ 2 ];
-				$attr = $attr[ 1 ];
-
-				return ! empty( preg_grep( "/$url/", self::RESOURCE_HINTS_URLS ) ) && in_array( $attr, self::RESOURCE_HINTS_ATTR );
-			}
-		);
-
-		return str_replace( $search, '', $html );
-	}
-
-	/**
-	 * This method uses Regular Expressions to parse the HTML. It's tested to be at least
+	 * This method uses Regular Expressions to process the HTML produced by the buffer. It's tested to be at least
 	 * twice as fast compared to using Xpath.
+	 *
 	 * Test results (in seconds, with XDebug enabled)
 	 * Uncached:    17.81094789505
 	 *              18.687641859055
@@ -436,7 +397,7 @@ class Process {
 	 *
 	 * @return string Valid HTML, filtered by @filter omgf_processed_html.
 	 */
-	public function parse( $html ) {
+	public function process( $html ) {
 		if ( $this->is_amp() ) {
 			return apply_filters( 'omgf_processed_html', $html, $this ); // @codeCoverageIgnore
 		}
@@ -446,7 +407,7 @@ class Process {
 		 */
 		preg_match_all( '/<link.*?[\/]?>/s', $html, $links );
 
-		if ( empty( $links[ 0 ] ) ) {
+		if ( empty( $links[0] ) ) {
 			return apply_filters( 'omgf_processed_html', $html, $this ); // @codeCoverageIgnore
 		}
 
@@ -460,7 +421,7 @@ class Process {
 		 * @since  v5.5.0 Added compatibility for WP.com's "GDPR compliant" Google Fonts API.
 		 */
 		$links = array_filter(
-			$links[ 0 ],
+			$links[0],
 			function ( $link ) {
 				return apply_filters(
 					'omgf_frontend_process_parse_links',
@@ -473,21 +434,21 @@ class Process {
 		$google_fonts   = $this->build_fonts_set( $links );
 		$search_replace = $this->build_search_replace( $google_fonts );
 
-		if ( empty( $search_replace[ 'search' ] ) || empty( $search_replace[ 'replace' ] ) ) {
+		if ( empty( $search_replace['search'] ) || empty( $search_replace['replace'] ) ) {
 			return apply_filters( 'omgf_processed_html', $html, $this );
 		}
 
 		/**
-		 * Use string position of $search to make sure only that instance of the string is replaced.
+		 * Use the string position of $search to make sure only that instance of the string is replaced.
 		 * This is to prevent duplicate replaces.
 		 *
 		 * @since v5.3.7
 		 */
-		foreach ( $search_replace[ 'search' ] as $key => $search ) {
+		foreach ( $search_replace['search'] as $key => $search ) {
 			$position = strpos( $html, $search );
 
-			if ( $position !== false && isset( $search_replace[ 'replace' ][ $key ] ) ) {
-				$html = substr_replace( $html, $search_replace[ 'replace' ][ $key ], $position, strlen( $search ) );
+			if ( $position !== false && isset( $search_replace['replace'][ $key ] ) ) {
+				$html = substr_replace( $html, $search_replace['replace'][ $key ], $position, strlen( $search ) );
 			}
 		}
 
@@ -521,14 +482,14 @@ class Process {
 			/**
 			 * @var array $id Fallback to empty string if no id attribute exists.
 			 */
-			$id = $this->strip_css_tag( $id[ 'id' ] ?? '' );
+			$id = $this->strip_css_tag( $id['id'] ?? '' );
 
 			preg_match( '/href=[\'"](?P<href>.*?)[\'"]/', $link, $href );
 
 			/**
 			 * No valid href attribute provide in link element.
 			 */
-			if ( ! isset( $href[ 'href' ] ) ) {
+			if ( ! isset( $href['href'] ) ) {
 				continue; // @codeCoverageIgnore
 			}
 
@@ -537,20 +498,20 @@ class Process {
 			 * using proper WordPress conventions. We generate our own using the length of the href attribute
 			 * to serve as a UID. This prevents clashes with other non-properly enqueued stylesheets on other pages.
 			 *
+			 * @var string $id
 			 * @since v5.1.4
 			 *
-			 * @var string $id
 			 */
 			if ( ! $id ) {
-				$id = "$handle-" . strlen( $href[ 'href' ] ); // @codeCoverageIgnore
+				$id = "$handle-" . strlen( $href['href'] ); // @codeCoverageIgnore
 			}
 
-			$google_fonts[ $key ][ 'id' ]   = apply_filters( 'omgf_frontend_process_fonts_set', $id, $href );
-			$google_fonts[ $key ][ 'link' ] = $link;
+			$google_fonts[ $key ]['id']   = apply_filters( 'omgf_frontend_process_fonts_set', $id, $href );
+			$google_fonts[ $key ]['link'] = $link;
 			/**
 			 * This is used for search/replace later on. This shouldn't be tampered with.
 			 */
-			$google_fonts[ $key ][ 'href' ] = apply_filters( 'omgf_frontend_process_fonts_set_href', $href[ 'href' ], $link );
+			$google_fonts[ $key ]['href'] = apply_filters( 'omgf_frontend_process_fonts_set_href', $href['href'], $link );
 		}
 
 		return $google_fonts;
@@ -599,7 +560,7 @@ class Process {
 			/**
 			 * Handles should be all lowercase to prevent duplication issues on some filesystems.
 			 */
-			$handle          = strtolower( $stack[ 'id' ] );
+			$handle          = strtolower( $stack['id'] );
 			$original_handle = $handle;
 
 			/**
@@ -610,13 +571,13 @@ class Process {
 				'omgf_unloaded_stylesheets',
 				OMGF::unloaded_stylesheets() && in_array( $handle, OMGF::unloaded_stylesheets() )
 			) ) {
-				$search[ $key ]  = $stack[ 'link' ]; // @codeCoverageIgnore
+				$search[ $key ]  = $stack['link']; // @codeCoverageIgnore
 				$replace[ $key ] = ''; // @codeCoverageIgnore
 
 				continue; // @codeCoverageIgnore
 			}
 
-			$cache_key = OMGF::get_cache_key( $stack[ 'id' ] );
+			$cache_key = OMGF::get_cache_key( $stack['id'] );
 
 			/**
 			 * $cache_key is used for caching. $handle contains the original handle.
@@ -628,8 +589,8 @@ class Process {
 			/**
 			 * Regular requests (in the frontend) will end here if the file exists.
 			 */
-			if ( ! isset( $_GET[ 'omgf_optimize' ] ) && file_exists( OMGF_UPLOAD_DIR . "/$handle/$handle.css" ) ) {
-				$search[ $key ]  = $stack[ 'href' ];
+			if ( ! isset( $_GET['omgf_optimize'] ) && file_exists( OMGF_UPLOAD_DIR . "/$handle/$handle.css" ) ) {
+				$search[ $key ]  = $stack['href'];
 				$replace[ $key ] = OMGF_UPLOAD_URL . "/$handle/$handle.css?ver=" . $this->timestamp;
 
 				continue;
@@ -638,7 +599,7 @@ class Process {
 			/**
 			 * @since v5.3.7 decode URL and special HTML chars to make sure all params are properly processed later on.
 			 */
-			$href         = urldecode( htmlspecialchars_decode( $stack[ 'href' ] ) );
+			$href         = urldecode( htmlspecialchars_decode( $stack['href'] ) );
 			$parsed_query = wp_parse_url( $href, PHP_URL_QUERY );
 			$query        = [];
 
@@ -649,28 +610,28 @@ class Process {
 			/**
 			 * If required parameters aren't set, this request is most likely invalid. Let's just remove it.
 			 */
-			if ( apply_filters( 'omgf_frontend_process_invalid_request', ! isset( $query[ 'family' ] ), $href ) ) {
-				$search[ $key ]  = $stack[ 'link' ];
+			if ( apply_filters( 'omgf_frontend_process_invalid_request', ! isset( $query['family'] ), $href ) ) {
+				$search[ $key ]  = $stack['link'];
 				$replace[ $key ] = '';
 
-				continue;
+				continue; // @codeCoverageIgnore
 			}
 
-			$optimize = new Optimize( $stack[ 'href' ], $handle, $original_handle );
+			$optimize = new Optimize( $stack['href'], $handle, $original_handle );
 
 			/**
 			 * @var string $cached_url Absolute URL or empty string.
 			 */
 			$cached_url = $optimize->process();
 
-			$search[ $key ]  = $stack[ 'href' ];
+			$search[ $key ]  = $stack['href'];
 			$replace[ $key ] = $cached_url ? $cached_url . '?ver=' . $this->timestamp : '';
 		}
 
-		return [
+		return apply_filters( 'omgf_process_search_replace', [
 			'search'  => $search,
 			'replace' => $replace,
-		];
+		] );
 	}
 
 	/**
@@ -681,7 +642,7 @@ class Process {
 	 * @return void
 	 */
 	private function parse_iframes( $html ) {
-		$found_iframes = OMGF::get_option( Settings::OMGF_FOUND_IFRAMES, [] );
+		$found_iframes = OMGF::get_option( Settings::OMGF_DB_FOUND_IFRAMES, [] );
 		$count_iframes = count( $found_iframes );
 
 		foreach ( Dashboard::IFRAMES_LOADING_FONTS as $script_id => $script ) {
@@ -691,34 +652,93 @@ class Process {
 		}
 
 		if ( $count_iframes !== count( $found_iframes ) ) {
-			OMGF::update_option( Settings::OMGF_FOUND_IFRAMES, $found_iframes );
+			OMGF::update_option( Settings::OMGF_DB_FOUND_IFRAMES, $found_iframes ); // @codeCoverageIgnore
 		}
 	}
 
 	/**
-	 * Adds a little success message to the HTML, to create a more logic user flow when manually optimizing pages.
+	 * We're downloading the fonts, so preconnecting to Google is a waste of time. Literally.
 	 *
-	 * @param string $html Valid HTML
+	 * @since v5.0.5 Use a regular expression to match all resource hints.
 	 *
-	 * @return string
+	 * @param string $html Valid HTML.
+	 *
+	 * @return string Valid HTML.
 	 */
-	public function add_success_message( $html ) {
-		if ( ! isset( $_GET[ 'omgf_optimize' ] ) || wp_doing_ajax() || ! current_user_can( 'manage_options' ) ) {
-			return $html;
+	public function remove_resource_hints( $html ) {
+		/**
+		 * @since v5.1.5 Use a lookaround that matches all link elements, because otherwise
+		 *               matches grow past their supposed boundaries.
+		 */
+		preg_match_all( '/(?=<link).+?(?<=>)/s', $html, $resource_hints );
+
+		if ( empty( $resource_hints[0] ) ) {
+			return $html; // @codeCoverageIgnore
 		}
 
-		$parts = preg_split( '/(<body.*?>)/', $html, - 1, PREG_SPLIT_NO_EMPTY | PREG_SPLIT_DELIM_CAPTURE );
+		/**
+		 * @since v5.1.5 Filter out any resource hints with a href pointing to Google Fonts' APIs.
+		 * @since v5.2.1 Use preg_match() to exactly match an element's attribute, since 3rd party
+		 *               plugins (e.g. Asset Cleanup) also tend to include their own custom attributes,
+		 *               e.g. data-wpacu-to-be-preloaded, which would also match in strpos('preload', $match).
+		 */
+		$search = array_filter(
+			$resource_hints[0],
+			function ( $resource_hint ) {
+				preg_match( '/href=[\'"](https?:)?\/\/(.*?)[\'"\/]/', $resource_hint, $url );
+				preg_match( '/rel=[\'"](.*?)[ \'"]/', $resource_hint, $attr );
 
-		if ( empty( $parts[ 0 ] ) || empty( $parts[ 1 ] ) || empty( $parts[ 2 ] ) ) {
-			return $html;
-		}
+				if ( empty( $url[2] ) || empty( $attr[1] ) ) {
+					return false; // @codeCoverageIgnore
+				}
 
-		$message_div = '<div class="omgf-optimize-success-message" style="padding: 25px 15px 15px; background-color: #fff; border-left: 3px solid #00a32a; border-top: 1px solid #c3c4c7; border-bottom: 1px solid #c3c4c7; border-right: 1px solid #c3c4c7; margin: 5px 20px 15px; font-family: Arial, \'Helvetica Neue\', sans-serif; font-weight: bold; font-size: 13px; color: #3c434a;"><span>%s</span></div>';
-		$message     = sprintf(
-			__( 'Google Fonts optimization completed. Return to the <a href="%s">settings screen</a> to see the results.', 'host-webfonts-local' ),
-			admin_url( 'options-general.php?page=' . Settings::OMGF_ADMIN_PAGE )
+				$url  = $url[2];
+				$attr = $attr[1];
+
+				return ! empty( preg_grep( "/$url/", self::RESOURCE_HINTS_URLS ) ) && in_array( $attr, self::RESOURCE_HINTS_ATTR );
+			}
 		);
 
-		return $parts[ 0 ] . $parts[ 1 ] . sprintf( $message_div, $message ) . $parts[ 2 ];
+		return str_replace( $search, '', $html );
+	}
+
+	/**
+	 * Returns the buffer for filtering, so page cache doesn't break.
+	 *
+	 * @since v5.0.0 Tested with:
+	 *               - Asset Cleanup Pro
+	 *                 - Works
+	 *               - Cache Enabler v1.8.7
+	 *                 - Default Settings
+	 *               - Kinsta Cache (Same as Cache Enabler?)
+	 *                 - Works on Daan.dev
+	 *               - LiteSpeed Cache
+	 *                 - Don't know (Gal Baras tested it: https://wordpress.org/support/topic/completely-broke-wp-rocket-plugin/#post-15377538)
+	 *               - W3 Total Cache v2.2.1:
+	 *                 - Page Cache: Disk (basic)
+	 *                 - Database/Object Cache: Off
+	 *                 - JS/CSS minify/combine: On
+	 *               - WP Fastest Cache v0.9.5
+	 *                 - JS/CSS minify/combine: On
+	 *                 - Page Cache: On
+	 *               - WP Rocket v3.8.8:
+	 *                 - Page Cache: Enabled
+	 *                 - JS/CSS minify/combine: Enabled
+	 *               - WP Super Cache v1.7.4
+	 *                 - Page Cache: Enabled
+	 * Not tested (yet):
+	 * TODO: [OMGF-41] - Swift Performance
+	 * @return string Valid HTML
+	 *
+	 * @codeCoverageIgnore
+	 */
+	public function return_buffer( $html ) {
+		if ( ! $html ) {
+			return $html;
+		}
+
+		do_action( 'omgf_return_buffer' );
+
+		return apply_filters( 'omgf_buffer_output', $html );
 	}
 }

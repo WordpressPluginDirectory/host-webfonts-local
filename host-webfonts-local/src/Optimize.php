@@ -10,7 +10,7 @@
 *
 * @package  : OMGF
 * @author   : Daan van den Bergh
-* @copyright: © 2025 Daan van den Bergh
+* @copyright: © 2026 Daan van den Bergh
 * @url      : https://daan.dev
 * * * * * * * * * * * * * * * * * * * */
 
@@ -67,12 +67,6 @@ class Optimize {
 	 * @since v5.3.0
 	 */
 	private $variable_fonts = [];
-
-	/**
-	 * @var array $available_used_subsets Contains an array_intersect() of subsets that're set to be used AND are actually available.
-	 * @since v5.4.4
-	 */
-	private $available_used_subsets = [];
 
 	/**
 	 * @param string $url             Google Fonts API URL, e.g. "fonts.googleapis.com/css?family="Lato:100,200,300,etc."
@@ -147,7 +141,7 @@ class Optimize {
 					return [ $this->original_handle => $object ];
 				default:
 					// 'url'
-					$timestamp = OMGF::get_option( Settings::OMGF_CACHE_TIMESTAMP );
+					$timestamp = OMGF::get_option( Settings::OMGF_DB_CACHE_TIMESTAMP );
 
 					return str_replace( OMGF_UPLOAD_DIR, OMGF_UPLOAD_URL, $local_file ) . '?ver=' . $timestamp;
 			}
@@ -157,7 +151,7 @@ class Optimize {
 		/**
 		 * @since v5.3.8 If any settings were changed, this will make sure the cache is no longer marked as stale.
 		 */
-		delete_option( Settings::OMGF_CACHE_IS_STALE );
+		delete_option( Settings::OMGF_FLAG_CACHE_IS_STALE );
 
 		$stylesheet_bak = $this->stylesheet;
 
@@ -221,7 +215,7 @@ class Optimize {
 					);
 
 					/**
-					 * If file already exists the OMGF_Download class bails early.
+					 * If the file already exists, the OMGF_Download class will bail early.
 					 */
 					$variant->woff2 = OMGF::download( $variant->woff2, $filename, $this->path );
 				}
@@ -236,7 +230,17 @@ class Optimize {
 			wp_mkdir_p( $this->path ); // @codeCoverageIgnore
 		}
 
-		file_put_contents( $local_file, $stylesheet );
+		$written = @file_put_contents( $local_file, $stylesheet );
+		$length  = strlen( $stylesheet );
+
+		/** @codeCoverageIgnoreStart */
+		if ( $written === false || $written !== $length ) {
+			OMGF::debug( __( 'Failed to write stylesheet:', 'host-webfonts-local' ) . ' ' . $local_file );
+			OMGF::delete( $local_file );
+
+			return '';
+		}
+		/** @codeCoverageIgnoreEnd */
 
 		/**
 		 * @var object $fonts_bak is used to list the fonts in wp-admin (and for loading preloads in the frontend.)
@@ -258,16 +262,6 @@ class Optimize {
 		$optimized_fonts_frontend = OMGF::optimized_fonts( $current_stylesheet, true );
 
 		OMGF::update_option( Settings::OMGF_OPTIMIZE_SETTING_OPTIMIZED_FONTS_FRONTEND, $optimized_fonts_frontend );
-
-		/**
-		 * @see   OMGF_Optimize_Run
-		 * @since v5.4.4 Stores the subsets actually available in this configuration to the database.
-		 */
-		if ( ! empty( OMGF::get_option( Settings::OMGF_ADV_SETTING_SUBSETS ) ) ) {
-			$available_used_subsets = OMGF::available_used_subsets( $this->available_used_subsets );
-
-			OMGF::update_option( Settings::OMGF_AVAILABLE_USED_SUBSETS, $available_used_subsets );
-		}
 
 		switch ( $this->return ) {
 			case 'path':
@@ -310,7 +304,7 @@ class Optimize {
 				 * Allow WP devs to use a different User-Agent, e.g. for compatibility with older browsers/OSes.
 				 *
 				 * @filter omgf_optimize_user_agent
-				 */ 'user-agent' => apply_filters( 'omgf_optimize_user_agent', self::USER_AGENT[ 'woff2' ] ),
+				 */ 'user-agent' => apply_filters( 'omgf_optimize_user_agent', self::USER_AGENT['woff2'] ),
 			]
 		);
 
@@ -335,11 +329,11 @@ class Optimize {
 
 		preg_match_all( '/font-family:[\s\n]*[\'\"]?(.*?)[\'\"]?;/', $stylesheet, $font_families );
 
-		if ( empty( $font_families[ 1 ] ) ) {
+		if ( empty( $font_families[1] ) ) {
 			return []; // @codeCoverageIgnore
 		}
 
-		$font_families = array_unique( $font_families[ 1 ] );
+		$font_families = array_unique( $font_families[1] );
 		$object        = [];
 
 		OMGF::debug_array( __( 'Font-families found', 'host-webfonts-local' ), $font_families );
@@ -391,17 +385,17 @@ class Optimize {
 			$font_faces
 		);
 
-		if ( empty( $font_faces[ 0 ] ) ) {
+		if ( empty( $font_faces[0] ) ) {
 			return []; // @codeCoverageIgnore
 		}
 
 		OMGF::debug(
-			sprintf( __( 'Found %s @font-face statements.', 'host-webfonts-local' ), count( $font_faces[ 0 ] ) )
+			sprintf( __( 'Found %s @font-face statements.', 'host-webfonts-local' ), count( $font_faces[0] ) )
 		);
 
 		$font_object = [];
 
-		foreach ( $font_faces[ 0 ] as $font_face ) {
+		foreach ( $font_faces[0] as $font_face ) {
 			/**
 			 * @since v5.3.3 Exact match for font-family attribute, to prevent similar font names from falling through, e.g., Roboto and Roboto Slab.
 			 */
@@ -418,10 +412,10 @@ class Optimize {
 			preg_match( '/\/\*\s([a-z\-0-9\[\]]+?)\s\*\//', $font_face, $subset );
 			preg_match( '/unicode-range:\s(.*?);/', $font_face, $range );
 
-			$font_style  = ! empty( $font_style[ 1 ] ) ? $font_style[ 1 ] : 'normal';
-			$font_weight = ! empty( $font_weight[ 1 ] ) ? $font_weight [ 1 ] : '400';
-			$font_src    = ! empty( $font_src[ 1 ] ) ? $font_src[ 1 ] : '';
-			$subset      = ! empty( $subset[ 1 ] ) ? trim( $subset[ 1 ], '[]' ) : '';
+			$font_style  = ! empty( $font_style[1] ) ? $font_style[1] : 'normal';
+			$font_weight = ! empty( $font_weight[1] ) ? $font_weight[1] : '400';
+			$font_src    = ! empty( $font_src[1] ) ? $font_src[1] : '';
+			$subset      = ! empty( $subset[1] ) ? trim( $subset[1], '[]' ) : '';
 
 			/**
 			 * @since v5.3.0 No need to keep this if this variant belongs to a subset we don't need.
@@ -450,8 +444,8 @@ class Optimize {
 				$font_object[ $key ]->subset = $subset;
 			}
 
-			if ( ! empty( $range ) && isset( $range[ 1 ] ) ) {
-				$font_object[ $key ]->range = $range[ 1 ];
+			if ( ! empty( $range ) && isset( $range[1] ) ) {
+				$font_object[ $key ]->range = $range[1];
 			}
 
 			$id = strtolower( str_replace( ' ', '-', $font_family ) );
@@ -487,19 +481,11 @@ class Optimize {
 
 		preg_match_all( '/(?<=\/\*)\s*([\s\S]*?)\s*(?=\*\/\n{0,1}[ \t]*@font-face)/', $stylesheet, $subsets );
 
-		if ( empty( $subsets[ 1 ] ) ) {
+		if ( empty( $subsets[1] ) ) {
 			return []; // @codeCoverageIgnore
 		}
 
-		$subsets = array_unique( $subsets[ 1 ] );
-
-		/**
-		 * @since v5.4.4 Stores all subsets that are selected to be used AND are actually available in this font-family.
-		 */
-		$this->available_used_subsets[ $font_family ] = array_intersect(
-			$subsets,
-			OMGF::get_option( Settings::OMGF_ADV_SETTING_SUBSETS )
-		);
+		$subsets = array_unique( $subsets[1] );
 
 		OMGF::debug_array( __( 'Subset @font-face statements', 'host-webfonts-local' ), $subsets );
 
@@ -521,21 +507,21 @@ class Optimize {
 		// Extract all @font-face blocks with their comments
 		preg_match_all( '#/\*[^*]*\*+(?:[^/*][^*]*\*+)*/\s*@font-face\s*\{[^}]*}#', $stylesheet, $font_face_matches );
 
-		if ( empty( $font_face_matches[ 0 ] ) ) {
+		if ( empty( $font_face_matches[0] ) ) {
 			return $stylesheet;
 		}
 
 		$font_faces_to_keep = [];
 		$unloaded_fonts     = OMGF::unloaded_fonts()[ $this->original_handle ];
 
-		foreach ( $font_face_matches[ 0 ] as $font_face_block ) {
+		foreach ( $font_face_matches[0] as $font_face_block ) {
 			// Extract font-family from the @font-face block
 			if ( preg_match( '/font-family:\s*[\'"]?([^\'";]+)[\'"]?\s*;/', $font_face_block, $font_family ) ) {
-				if ( empty( $font_family[ 1 ] ) ) {
+				if ( empty( $font_family[1] ) ) {
 					continue;
 				}
 
-				$font_family = trim( $font_family[ 1 ] );
+				$font_family = trim( $font_family[1] );
 				$font_id     = strtolower( str_replace( ' ', '-', $font_family ) );
 
 				// Are any unloaded variants set for this $font_id?
@@ -549,12 +535,12 @@ class Optimize {
 				preg_match( '/font-weight:\s*([^;]+);/', $font_face_block, $font_weight );
 				preg_match( '/font-style:\s*([^;]+);/', $font_face_block, $font_style );
 
-				if ( empty( $font_weight[ 1 ] ) ) {
+				if ( empty( $font_weight[1] ) ) {
 					continue;
 				}
 
-				$font_weight = trim( $font_weight[ 1 ] );
-				$font_style  = isset( $font_style[ 1 ] ) ? trim( $font_style[ 1 ] ) : '';
+				$font_weight = trim( $font_weight[1] );
+				$font_style  = isset( $font_style[1] ) ? trim( $font_style[1] ) : '';
 
 				if ( $font_style === 'normal' ) {
 					$font_style = '';

@@ -10,7 +10,7 @@
 *
 * @package  : OMGF
 * @author   : Daan van den Bergh
-* @copyright: © 2025 Daan van den Bergh
+* @copyright: © 2026 Daan van den Bergh
 * @url      : https://daan.dev
 * * * * * * * * * * * * * * * * * * * */
 
@@ -39,7 +39,7 @@ class WPTT {
 	 * Adds a piece of validation to make sure stylesheets added using the WPTT Webfont Loader are included.
 	 *
 	 * @filter omgf_frontend_process_parse_links
-	 * @see    \OMGF\Frontend\Process::parse()
+	 * @see    \OMGF\Frontend\Process::process()
 	 *
 	 * @param $is_valid
 	 * @param $link

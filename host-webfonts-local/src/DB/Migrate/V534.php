@@ -10,7 +10,7 @@
 *
 * @package  : OMGF
 * @author   : Daan van den Bergh
-* @copyright: © 2025 Daan van den Bergh
+* @copyright: © 2026 Daan van den Bergh
 * @url      : https://daan.dev
 * * * * * * * * * * * * * * * * * * * */
 
@@ -75,7 +75,7 @@ class V534 {
 		 * Mark cache as stale if upgrade is required.
 		 */
 		if ( $upgrade_req ) {
-			OMGF::update_option( Settings::OMGF_CACHE_IS_STALE, $upgrade_req );
+			OMGF::update_option( Settings::OMGF_FLAG_CACHE_IS_STALE, $upgrade_req );
 		}
 
 		/**

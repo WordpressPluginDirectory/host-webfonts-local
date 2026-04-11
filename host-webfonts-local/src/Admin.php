@@ -10,7 +10,7 @@
 *
 * @package  : OMGF
 * @author   : Daan van den Bergh
-* @copyright: © 2025 Daan van den Bergh
+* @copyright: © 2026 Daan van den Bergh
 * @url      : https://daan.dev
 * * * * * * * * * * * * * * * * * * * */
 
@@ -22,7 +22,7 @@ use OMGF\Admin\Settings;
 use OMGF\Admin\Updates;
 
 class Admin {
-	const OMGF_ADMIN_JS_HANDLE  = 'omgf-admin-js';
+	const OMGF_ADMIN_JS_HANDLE = 'omgf-admin-js';
 
 	const OMGF_ADMIN_CSS_HANDLE = 'omgf-admin-css';
 
@@ -104,57 +104,6 @@ class Admin {
 	}
 
 	/**
-	 * Enqueues the necessary JS and CSS and passes options as a JS object.
-	 *
-	 * @param $hook
-	 *
-	 * @codeCoverageIgnore because we don't want to test core functions.
-	 */
-	public function enqueue_admin_scripts( $hook ) {
-		if ( $hook == 'settings_page_' . Settings::OMGF_ADMIN_PAGE ) {
-			wp_enqueue_script(
-				self::OMGF_ADMIN_JS_HANDLE,
-				plugin_dir_url( OMGF_PLUGIN_FILE ) . 'assets/js/omgf-admin.js',
-				[ 'jquery' ],
-				filemtime( OMGF_PLUGIN_DIR . 'assets/js/omgf-admin.js' ),
-				true
-			);
-			wp_enqueue_style(
-				self::OMGF_ADMIN_CSS_HANDLE,
-				plugin_dir_url( OMGF_PLUGIN_FILE ) . 'assets/css/omgf-admin.css',
-				[],
-				filemtime( OMGF_PLUGIN_DIR . 'assets/css/omgf-admin.css' )
-			);
-		}
-	}
-
-	/**
-	 * Add notice to admin screen.
-	 *
-	 * @codeCoverageIgnore
-	 */
-	public function print_notices() {
-		Notice::print_notices();
-	}
-
-	/**
-	 * @see    OMGF::admin_optimized_fonts()
-	 * @since  v5.0.5 Forces get_option() to fetch a fresh copy of omgf_optimized_fonts from the database,
-	 *               we're doing plenty to limit reads from the DB already. So, this is warranted.
-	 *
-	 * @param array $alloptions
-	 *
-	 * @return array
-	 */
-	public function force_optimized_fonts_from_db( $alloptions ) {
-		if ( isset( $alloptions[ Settings::OMGF_OPTIMIZE_SETTING_OPTIMIZED_FONTS ] ) && ! $alloptions[ Settings::OMGF_OPTIMIZE_SETTING_OPTIMIZED_FONTS ] ) {
-			unset( $alloptions[ Settings::OMGF_OPTIMIZE_SETTING_OPTIMIZED_FONTS ] );
-		}
-
-		return $alloptions;
-	}
-
-	/**
 	 * Triggered when unload settings is changed, cleans up old cache files.
 	 * TODO: Clean up doesn't work on 2nd run?
 	 */
@@ -179,6 +128,59 @@ class Admin {
 	}
 
 	/**
+	 * Enqueues the necessary JS and CSS and passes options as a JS object.
+	 *
+	 * @param $hook
+	 *
+	 * @codeCoverageIgnore because we don't want to test core functions.
+	 */
+	public function enqueue_admin_scripts( $hook ) {
+		if ( $hook == 'settings_page_' . Settings::OMGF_ADMIN_PAGE ) {
+			wp_enqueue_script(
+				self::OMGF_ADMIN_JS_HANDLE,
+				plugin_dir_url( OMGF_PLUGIN_FILE ) . 'assets/js/omgf-admin.js',
+				[ 'jquery' ],
+				filemtime( OMGF_PLUGIN_DIR . 'assets/js/omgf-admin.js' ),
+				true
+			);
+			wp_enqueue_style(
+				self::OMGF_ADMIN_CSS_HANDLE,
+				plugin_dir_url( OMGF_PLUGIN_FILE ) . 'assets/css/omgf-admin.css',
+				[],
+				filemtime( OMGF_PLUGIN_DIR . 'assets/css/omgf-admin.css' )
+			);
+
+			wp_localize_script(
+				self::OMGF_ADMIN_JS_HANDLE,
+				'omgf_admin_i18n',
+				[
+					'rest_url'             => get_rest_url( null, 'omgf/v1' ),
+					'nonce'                => wp_create_nonce( 'wp_rest' ),
+					'remind_me_in_30_days' => __( 'Remind me in 30 days', 'host-webfonts-local' ),
+				]
+			);
+		}
+	}
+
+	/**
+	 * @see    OMGF::admin_optimized_fonts()
+	 *
+	 * @since  v5.0.5 Forces get_option() to fetch a fresh copy of omgf_optimized_fonts from the database,
+	 *               we're doing plenty to limit reads from the DB already. So, this is warranted.
+	 *
+	 * @param array $alloptions
+	 *
+	 * @return array
+	 */
+	public function force_optimized_fonts_from_db( $alloptions ) {
+		if ( isset( $alloptions[ Settings::OMGF_OPTIMIZE_SETTING_OPTIMIZED_FONTS ] ) && ! $alloptions[ Settings::OMGF_OPTIMIZE_SETTING_OPTIMIZED_FONTS ] ) {
+			unset( $alloptions[ Settings::OMGF_OPTIMIZE_SETTING_OPTIMIZED_FONTS ] );
+		}
+
+		return $alloptions;
+	}
+
+	/**
 	 * Shows notice if $option_name is in $show_notice array.
 	 *
 	 * @see $show_message
@@ -192,7 +194,7 @@ class Admin {
 		/**
 		 * Don't show this message on the Main tab.
 		 */
-		if ( ! array_key_exists( 'tab', $_GET ) || ( $_GET[ 'tab' ] === Settings::OMGF_SETTINGS_FIELD_OPTIMIZE ) ) {
+		if ( ! array_key_exists( 'tab', $_GET ) || ( $_GET['tab'] === Settings::OMGF_SETTINGS_FIELD_OPTIMIZE ) ) {
 			return; // @codeCoverageIgnore
 		}
 
@@ -233,7 +235,7 @@ class Admin {
 
 		if ( ! empty( $wp_settings_errors ) ) {
 			foreach ( $wp_settings_errors as $error ) {
-				if ( str_contains( $error[ 'code' ], 'omgf' ) ) {
+				if ( str_contains( $error['code'], 'omgf' ) ) {
 					$show_message = false;
 
 					break;
@@ -246,7 +248,7 @@ class Admin {
 		}
 
 		if ( $show_message ) {
-			OMGF::update_option( Settings::OMGF_CACHE_IS_STALE, true );
+			OMGF::update_option( Settings::OMGF_FLAG_CACHE_IS_STALE, true );
 
 			add_settings_error(
 				'general',
@@ -293,5 +295,14 @@ class Admin {
 		}
 
 		return $diff;
+	}
+
+	/**
+	 * Add notice to admin screen.
+	 *
+	 * @codeCoverageIgnore
+	 */
+	public function print_notices() {
+		Notice::print_notices();
 	}
 }

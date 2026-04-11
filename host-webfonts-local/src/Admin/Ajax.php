@@ -16,6 +16,7 @@
 
 namespace OMGF\Admin;
 
+use OMGF\Cache;
 use OMGF\Helper as OMGF;
 
 class Ajax {
@@ -44,7 +45,7 @@ class Ajax {
 			wp_die( __( 'Hmmm, are you lost?', 'host-webfonts-local' ) ); // @codeCoverageIgnore
 		}
 
-		$warning_id     = $_POST[ 'warning_id' ];
+		$warning_id     = $_POST['warning_id'];
 		$hidden_notices = OMGF::get_option( Settings::OMGF_HIDDEN_NOTICES, [] );
 
 		if ( ! in_array( $warning_id, $hidden_notices ) ) {
@@ -70,7 +71,7 @@ class Ajax {
 			wp_die( __( "Hmmm, you're not supposed to be here.", 'host-webfonts-local' ) ); // @codeCoverageIgnore
 		}
 
-		$handle                   = $_POST[ 'handle' ];
+		$handle                   = $_POST['handle'];
 		$optimized_fonts          = OMGF::admin_optimized_fonts();
 		$optimized_fonts_frontend = OMGF::optimized_fonts();
 		$unloaded_fonts           = OMGF::unloaded_fonts();
@@ -120,6 +121,7 @@ class Ajax {
 	 * Removes the stale cache mark. Should be triggered along with a form submit.
 	 *
 	 * @codeCoverageIgnore Because all it does, basically, is delete an option from the DB.
+	 * @throws \ReflectionException
 	 */
 	public function refresh_cache() {
 		check_ajax_referer( Settings::OMGF_ADMIN_PAGE, 'nonce' );
@@ -135,61 +137,15 @@ class Ajax {
 					'init'    => Settings::OMGF_ADMIN_PAGE,
 					'exclude' => [],
 					'queue'   => [
-						Settings::OMGF_CACHE_IS_STALE,
+						Settings::OMGF_FLAG_CACHE_IS_STALE,
 					],
 				];
 			}
 		);
 
-		$this->empty_cache();
+		OMGF::flush_cache();
 
-		delete_option( Settings::OMGF_CACHE_IS_STALE );
-	}
-
-	/**
-	 * Empties all cache related entries in the database.
-	 *
-	 * @param string $initiator
-	 *
-	 * @return void
-	 *
-	 * @codeCoverageIgnore because this works the file system.
-	 */
-	private function empty_cache( $initiator = 'optimize-webfonts' ) {
-		$entries      = array_filter( (array) glob( OMGF_UPLOAD_DIR . '/*' ) );
-		$instructions = apply_filters(
-			'omgf_clean_up_instructions',
-			[
-				'init'    => $initiator,
-				'exclude' => [],
-				'queue'   => [
-					Settings::OMGF_GOOGLE_FONTS_CHECKER_RESULTS,
-					Settings::OMGF_AVAILABLE_USED_SUBSETS,
-					Settings::OMGF_CACHE_IS_STALE,
-					Settings::OMGF_CACHE_TIMESTAMP,
-					Settings::OMGF_FOUND_IFRAMES,
-					Settings::OMGF_OPTIMIZE_HAS_RUN,
-					Settings::OMGF_OPTIMIZE_SETTING_CACHE_KEYS,
-					Settings::OMGF_OPTIMIZE_SETTING_OPTIMIZED_FONTS,
-					Settings::OMGF_OPTIMIZE_SETTING_OPTIMIZED_FONTS_FRONTEND,
-					Settings::OMGF_OPTIMIZE_SETTING_UNLOAD_FONTS,
-					Settings::OMGF_OPTIMIZE_SETTING_PRELOAD_FONTS,
-					Settings::OMGF_OPTIMIZE_SETTING_UNLOAD_STYLESHEETS,
-				],
-			]
-		);
-
-		foreach ( $entries as $entry ) {
-			if ( in_array( $entry, $instructions[ 'exclude' ] ) ) {
-				continue;
-			}
-
-			OMGF::delete( $entry );
-		}
-
-		foreach ( $instructions[ 'queue' ] as $option ) {
-			OMGF::delete_option( $option );
-		}
+		delete_option( Settings::OMGF_FLAG_CACHE_IS_STALE );
 	}
 
 	/**
@@ -207,9 +163,9 @@ class Ajax {
 		}
 
 		try {
-			$init = $_POST[ 'init' ] ?? '';
+			$init = $_POST['init'] ?? '';
 
-			$this->empty_cache( $init );
+			OMGF::flush_cache( $init );
 
 			Notice::set_notice( __( 'Cache directory successfully emptied.', 'host-webfonts-local' ) );
 		} catch ( \Exception $e ) {

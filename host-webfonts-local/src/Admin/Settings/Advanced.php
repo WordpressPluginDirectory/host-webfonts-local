@@ -10,7 +10,7 @@
 *
 * @package  : OMGF
 * @author   : Daan van den Bergh
-* @copyright: © 2025 Daan van den Bergh
+* @copyright: © 2026 Daan van den Bergh
 * @url      : https://daan.dev
 * * * * * * * * * * * * * * * * * * * */
 
@@ -18,7 +18,6 @@ namespace OMGF\Admin\Settings;
 
 use OMGF\Helper as OMGF;
 use OMGF\Admin\Settings;
-use OMGF\Helper;
 
 /**
  * @codeCoverageIgnore
@@ -40,7 +39,6 @@ class Advanced extends Builder {
 		add_action( 'omgf_advanced_settings_content', [ $this, 'do_promo_fonts_source_url' ], 80 );
 		add_action( 'omgf_advanced_settings_content', [ $this, 'do_legacy_mode' ], 90 );
 		add_action( 'omgf_advanced_settings_content', [ $this, 'do_compatibility' ], 100 );
-		add_action( 'omgf_advanced_settings_content', [ $this, 'do_auto_config_subsets' ], 110 );
 		add_action( 'omgf_advanced_settings_content', [ $this, 'do_used_subsets' ], 120 );
 		add_action( 'omgf_advanced_settings_content', [ $this, 'do_disable_admin_bar_menu' ], 130 );
 		add_action( 'omgf_advanced_settings_content', [ $this, 'do_debug_mode' ], 140 );
@@ -75,19 +73,103 @@ class Advanced extends Builder {
 	}
 
 	/**
-	 * @return void
+	 *
 	 */
-	public function do_promo_white_label_css() {
+	public function do_compatibility() {
 		$this->do_checkbox(
-			__( 'White-label Stylesheets (Pro)', 'host-webfonts-local' ),
-			'white_label', ! empty( OMGF::get_option( 'white_label', 'on' ) ),
-			sprintf(
-				__(
-					'Enable this option to remove all branding and comments from generated stylesheets, further decreasing their size. %s',
-					'host-webfonts-local'
-				),
-				$this->promo
-			), ! defined( 'OMGF_PRO_ACTIVE' )
+			__( 'Divi Compatibility', 'host-webfonts-local' ),
+			Settings::OMGF_ADV_SETTING_COMPATIBILITY, ! empty( OMGF::get_option( Settings::OMGF_ADV_SETTING_COMPATIBILITY ) ),
+			__(
+				'Divi uses the same handle for Google Fonts stylesheets with different configurations. OMGF includes compatibility fixes to make sure these different stylesheets are processed correctly. Enable this if you see some fonts not appearing correctly. Default: off',
+				'host-webfonts-local'
+			)
+		);
+	}
+
+	public function do_debug_mode() {
+		$this->do_checkbox(
+			__( 'Debug Mode', 'host-webfonts-local' ),
+			Settings::OMGF_ADV_SETTING_DEBUG_MODE, ! empty( OMGF::get_option( Settings::OMGF_ADV_SETTING_DEBUG_MODE ) ),
+			__(
+				'Don\'t enable this option, unless when asked by me (Daan) or, if you know what you\'re doing.',
+				'host-webfonts-local'
+			)
+		);
+	}
+
+	public function do_disable_admin_bar_menu() {
+		$checked     = ! empty( OMGF::get_option( Settings::OMGF_ADV_SETTING_DISABLE_ADMIN_BAR_MENU ) );
+		$description = sprintf(
+			__(
+				'This disables the %s admin bar menu item and stops the Google Fonts checker from running in the frontend.',
+				'host-webfonts-local'
+			),
+			apply_filters( 'omgf_settings_page_title', 'OMGF' )
+		);
+
+		$this->do_checkbox(
+			__( 'Disable Admin Bar Menu', 'host-webfonts-local' ),
+			Settings::OMGF_ADV_SETTING_DISABLE_ADMIN_BAR_MENU,
+			$checked,
+			$description
+		);
+	}
+
+	/**
+	 * Show Download Log button if debug mode is on and debug file exists.
+	 */
+	public function do_download_log() {
+		if ( ! empty( OMGF::get_option( Settings::OMGF_ADV_SETTING_DEBUG_MODE ) ) ) :
+			?>
+			<tr>
+				<th></th>
+				<td>
+					<?php if ( file_exists( OMGF::log_file() ) ) : ?>
+						<?php
+						clearstatcache();
+						$nonce = wp_create_nonce( Settings::OMGF_ADMIN_PAGE );
+						?>
+						<a class="button button-secondary"
+						   href="<?php echo admin_url(
+							   "admin-ajax.php?action=omgf_download_log&nonce=$nonce"
+						   ); ?>"><?php _e(
+								'Download Log',
+								'host-webfonts-local'
+							); ?></a>
+						<a id="omgf-delete-log" class="button button-cancel"
+						   data-nonce="<?php echo $nonce; ?>"><?php _e(
+								'Delete log',
+								'host-webfonts-local'
+							); ?></a>
+						<?php if ( filesize( OMGF::log_file() ) > MB_IN_BYTES ) : ?>
+							<p class="omgf-warning"><?php _e(
+									'Your log file is currently larger than 1MB. To protect your filesystem, debug logging has stopped. Delete the log file to enable debug logging again.',
+									'host-webfonts-local'
+								); ?></p>
+						<?php endif; ?>
+					<?php else : ?>
+						<p class="description"><?php _e(
+								'No log file available for download.',
+								'host-webfonts-local'
+							); ?></p>
+					<?php endif; ?>
+				</td>
+			</tr>
+		<?php
+		endif;
+	}
+
+	/**
+	 *
+	 */
+	public function do_legacy_mode() {
+		$this->do_checkbox(
+			__( 'Legacy Browser Compatibility', 'host-webfonts-local' ),
+			Settings::OMGF_ADV_SETTING_LEGACY_MODE, ! empty( OMGF::get_option( Settings::OMGF_ADV_SETTING_LEGACY_MODE ) ),
+			__(
+				'Enable this option to use an older (Windows 7) User-Agent to add support for legacy browsers. Enabling this option negatively impacts file compression and disables Variable Fonts support. Default: off.',
+				'host-webfonts-local'
+			)
 		);
 	}
 
@@ -106,8 +188,10 @@ class Advanced extends Builder {
 
 		$this->do_checkbox(
 			__( 'Developer Mode (Pro)', 'host-webfonts-local' ),
-			'dtap', ! empty( OMGF::get_option( 'dtap', 'on' ) ),
-			$description, ! defined( 'OMGF_PRO_ACTIVE' ),
+			'dtap',
+			defined( 'OMGF_PRO_ACTIVE' ) && ! empty( OMGF::get_option( 'dtap', 'on' ) ),
+			$description,
+			! defined( 'OMGF_PRO_ACTIVE' ),
 			'task-manager-row'
 		);
 	}
@@ -132,52 +216,40 @@ class Advanced extends Builder {
 			__( 'Modify Source URL (Pro)', 'host-webfonts-local' ),
 			'source_url',
 			__( 'e.g. https://cdn.mydomain.com/alternate/relative-path', 'host-webfonts-local' ),
-			OMGF::get_option( 'source_url' ),
-			$description, ! defined( 'OMGF_PRO_ACTIVE' ) || OMGF::get_option( 'dtap' ) === 'on'
+			defined( 'OMGF_PRO_ACTIVE' ) && OMGF::get_option( 'source_url' ),
+			$description,
+			! defined( 'OMGF_PRO_ACTIVE' ) || OMGF::get_option( 'dtap' ) === 'on'
 		);
 	}
 
 	/**
-	 *
+	 * @return void
 	 */
-	public function do_legacy_mode() {
+	public function do_promo_white_label_css() {
 		$this->do_checkbox(
-			__( 'Legacy Browser Compatibility', 'host-webfonts-local' ),
-			Settings::OMGF_ADV_SETTING_LEGACY_MODE, ! empty( OMGF::get_option( Settings::OMGF_ADV_SETTING_LEGACY_MODE ) ),
-			__(
-				'Enable this option to use an older (Windows 7) User-Agent to add support for legacy browsers. Enabling this option negatively impacts file compression and disables Variable Fonts support. Default: off.',
-				'host-webfonts-local'
-			)
-		);
-	}
-
-	/**
-	 *
-	 */
-	public function do_compatibility() {
-		$this->do_checkbox(
-			__( 'Divi Compatibility', 'host-webfonts-local' ),
-			Settings::OMGF_ADV_SETTING_COMPATIBILITY, ! empty( OMGF::get_option( Settings::OMGF_ADV_SETTING_COMPATIBILITY ) ),
-			__(
-				'Divi uses the same handle for Google Fonts stylesheets with different configurations. OMGF includes compatibility fixes to make sure these different stylesheets are processed correctly. Enable this if you see some fonts not appearing correctly. Default: off',
-				'host-webfonts-local'
-			)
-		);
-	}
-
-	public function do_auto_config_subsets() {
-		$this->do_checkbox(
-			__( 'Auto-Configure Subsets', 'host-webfonts-local' ),
-			Settings::OMGF_ADV_SETTING_AUTO_SUBSETS, ! empty( OMGF::get_option( Settings::OMGF_ADV_SETTING_AUTO_SUBSETS, 'on' ) ),
+			__( 'White-label Stylesheets (Pro)', 'host-webfonts-local' ),
+			'white_label',
+			defined( 'OMGF_PRO_ACTIVE' ) && ! empty( OMGF::get_option( 'white_label', 'on' ) ),
 			sprintf(
 				__(
-					'When this option is checked, %s will set the <strong>Used Subset(s)</strong> option to only use subsets that\'re available for <u>all</u> detected font families. Novice users are advised to leave this enabled.',
+					'Enable this option to remove all branding and comments from generated stylesheets, further decreasing their size. %s',
 					'host-webfonts-local'
 				),
-				apply_filters( 'omgf_settings_page_title', 'OMGF' )
+				$this->promo
 			),
-			false,
-			'task-manager-row'
+			! defined( 'OMGF_PRO_ACTIVE' )
+		);
+	}
+
+	/**
+	 * Remove Settings/Files at Uninstall.
+	 */
+	public function do_uninstall() {
+		$this->do_checkbox(
+			__( 'Remove Settings/Files At Uninstall', 'host-webfonts-local' ),
+			Settings::OMGF_ADV_SETTING_UNINSTALL,
+			! empty( OMGF::get_option( Settings::OMGF_ADV_SETTING_UNINSTALL ) ),
+			__( 'Warning! This will remove all settings and cached fonts upon plugin deletion.', 'host-webfonts-local' )
 		);
 	}
 
@@ -192,102 +264,11 @@ class Advanced extends Builder {
 			Settings::OMGF_ADV_SETTING_SUBSETS,
 			Settings::OMGF_SUBSETS,
 			OMGF::get_option( Settings::OMGF_ADV_SETTING_SUBSETS ),
-			( ! empty( OMGF::get_option( Settings::OMGF_ADV_SETTING_AUTO_SUBSETS ) ) ? '<span class="used-subsets-notice info">' . __(
-					'Any changes made to this setting will be overwritten, because <strong>Auto-configure Subsets</strong> is enabled. Disable it if you wish to manage <strong>Used Subset(s)</strong> yourself. <u>Novice users shouldn\'t change this setting</u>!',
-					'host-webfonts-local'
-				) . '</span>' : '' ) . __(
-				'A subset is a (limited) set of characters belonging to an alphabet. Default: <code>latin</code>, <code>latin-ext</code>. Limit the selection to subsets your site actually uses. Selecting <u>too many</u> subsets can negatively impact performance! <em>Latin Extended and Vietnamese are an add-ons for Latin and can\'t be used by itself. Use CTRL + click to select multiple values.</em>',
+			__(
+				'A subset is a (limited) set of characters belonging to an alphabet. Default: <code>latin</code>, <code>latin-ext</code>. Limit the selection to subsets your site actually uses. Selecting <u>too many</u> subsets can negatively impact performance! <em>Latin Extended and Vietnamese are add-ons for Latin and can\'t be used by themselves. Use CTRL + click to select multiple values.</em>',
 				'host-webfonts-local'
 			),
 			true
-		);
-	}
-
-	public function do_disable_admin_bar_menu() {
-		$checked     = ! empty( OMGF::get_option( Settings::OMGF_ADV_SETTING_DISABLE_ADMIN_BAR_MENU ) );
-		$description = sprintf(
-			__(
-				'This disables the %s admin bar menu item and stops the Google Fonts checker from running in the frontend.',
-				'host-webfonts-local'
-			),
-			apply_filters( 'omgf_settings_page_title', 'OMGF' )
-		);
-
-		if ( $checked && OMGF::get_option( 'google_fonts_checker' ) && get_transient( 'omgf_pro_run_google_fonts_checker' ) ) {
-			$description .= ' ' . __( 'This setting will resume functioning once the Google Fonts checker has finished running.', 'host-webfonts-local' );
-		}
-
-		$this->do_checkbox(
-			__( 'Disable Admin Bar Menu', 'host-webfonts-local' ),
-			Settings::OMGF_ADV_SETTING_DISABLE_ADMIN_BAR_MENU,
-			$checked,
-			$description
-		);
-	}
-
-	public function do_debug_mode() {
-		$this->do_checkbox(
-			__( 'Debug Mode', 'host-webfonts-local' ),
-			Settings::OMGF_ADV_SETTING_DEBUG_MODE, ! empty( OMGF::get_option( Settings::OMGF_ADV_SETTING_DEBUG_MODE ) ),
-			__(
-				'Don\'t enable this option, unless when asked by me (Daan) or, if you know what you\'re doing.',
-				'host-webfonts-local'
-			)
-		);
-	}
-
-	/**
-	 * Show Download Log button if debug mode is on and debug file exists.
-	 */
-	public function do_download_log() {
-		if ( ! empty( OMGF::get_option( Settings::OMGF_ADV_SETTING_DEBUG_MODE ) ) ) :
-			?>
-			<tr>
-				<th></th>
-				<td>
-					<?php if ( file_exists( Helper::log_file() ) ) : ?>
-						<?php
-						clearstatcache();
-						$nonce = wp_create_nonce( Settings::OMGF_ADMIN_PAGE );
-						?>
-						<a class="button button-secondary"
-						   href="<?php echo admin_url(
-							   "admin-ajax.php?action=omgf_download_log&nonce=$nonce"
-						   ); ?>"><?php _e(
-								'Download Log',
-								'host-webfonts-local'
-							); ?></a>
-						<a id="omgf-delete-log" class="button button-cancel"
-						   data-nonce="<?php echo $nonce; ?>"><?php _e(
-								'Delete log',
-								'host-webfonts-local'
-							); ?></a>
-						<?php if ( filesize( Helper::log_file() ) > MB_IN_BYTES ) : ?>
-							<p class="omgf-warning"><?php _e(
-									'Your log file is currently larger than 1MB. To protect your filesystem, debug logging has stopped. Delete the log file to enable debug logging again.',
-									'host-webfonts-local'
-								); ?></p>
-						<?php endif; ?>
-					<?php else : ?>
-						<p class="description"><?php _e(
-								'No log file available for download.',
-								'host-webfonts-local'
-							); ?></p>
-					<?php endif; ?>
-				</td>
-			</tr>
-		<?php
-		endif;
-	}
-
-	/**
-	 * Remove Settings/Files at Uninstall.
-	 */
-	public function do_uninstall() {
-		$this->do_checkbox(
-			__( 'Remove Settings/Files At Uninstall', 'host-webfonts-local' ),
-			Settings::OMGF_ADV_SETTING_UNINSTALL, ! empty( OMGF::get_option( Settings::OMGF_ADV_SETTING_UNINSTALL ) ),
-			__( 'Warning! This will remove all settings and cached fonts upon plugin deletion.', 'host-webfonts-local' )
 		);
 	}
 }
